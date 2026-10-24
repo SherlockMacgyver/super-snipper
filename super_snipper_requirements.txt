@@ -1,0 +1,7 @@
+# Super Snipper runtime requirements (Windows; tested with Python 3.14).
+# FFmpeg is a separate program: put ffmpeg.exe on PATH or set SUPER_SNIPPER_FFMPEG.
+PySide6-Essentials>=6.11
+Pillow>=12.1
+numpy>=2.4
+psutil>=7.2
+soundcard>=0.4.6
