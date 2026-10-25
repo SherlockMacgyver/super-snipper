@@ -48,6 +48,10 @@ def main() -> int:
     parser.add_argument("--hud-settings", action="store_true", help="render --render-hud with the settings row expanded")
     parser.add_argument("--stop-recording", action="store_true", help="stop the active video recording")
     parser.add_argument("--self-test", action="store_true", help="print capture diagnostics")
+    parser.add_argument("--storyboard", nargs="?", const="", metavar="VIDEO", help="open video storyboard window, or export VIDEO with the options below")
+    parser.add_argument("--sample-rate", type=float, default=6, help="storyboard samples per --sample-unit (default 6 per minute)")
+    parser.add_argument("--sample-unit", choices=("second", "minute"), default="minute")
+    parser.add_argument("--sheet-edge", type=int, default=2048, help="maximum storyboard edge in pixels (64-4096)")
     parser.add_argument("--capture-box", help="capture left,top,right,bottom physical pixels")
     parser.add_argument("--no-clipboard", action="store_true", help="skip clipboard copy")
     parser.add_argument("--no-audio", action="store_true", help="record video without computer audio")
@@ -65,6 +69,17 @@ def main() -> int:
     args = parser.parse_args()
 
     config.setup_logging()
+    if args.storyboard is not None:
+        if not args.storyboard:
+            from .storyboard_ui import run_storyboard_window
+            return run_storyboard_window()
+        from .storyboard import inspect_video, make_plan, export_sheet
+        info = inspect_video(Path(args.storyboard))
+        plan = make_plan(info, args.sample_rate / (60 if args.sample_unit == "minute" else 1), args.sheet_edge)
+        output = export_sheet(plan)
+        print(f"storyboard={output}")
+        print(f"frames={plan.grid.count} grid={plan.grid.columns}x{plan.grid.rows} rate_per_second={plan.rate:.9g}")
+        return 0
     if args.cancel_event:
         winapi._CANCEL_EVENT = winapi._capture_event(args.cancel_event)
         winapi._check_capture_cancelled()

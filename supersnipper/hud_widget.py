@@ -118,6 +118,11 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
                 QtCore.QPointF(r.right() - 2, r.bottom()),
                 QtCore.QPointF(r.right() + 1, r.bottom() - 3),
             ]))
+        elif name == "storyboard":
+            for x in range(2):
+                for y in range(2):
+                    painter.drawRect(QtCore.QRectF(r.left() + x * r.width() / 2,
+                        r.top() + y * r.height() / 2, r.width() * 0.4, r.height() * 0.4))
         elif name == "gear":
             for i, frac in enumerate((0.22, 0.5, 0.78)):
                 y = r.top() + r.height() * frac
@@ -287,6 +292,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
             self.btn_stop = IconButton("stop", "Stop recording", danger=True)
             self.btn_markup = IconButton("markup", "Markup tools for snips and recordings")
             self.btn_gear = IconButton("gear", "Capture settings")
+            self.btn_storyboard = IconButton("storyboard", "Create storyboard from a video")
             self.btn_close = IconButton("close", "Hide panel (reopen from the tray or Win+Shift+X)")
 
             self.btn_snip.clicked.connect(lambda: self._launch(["--snip"]))
@@ -297,6 +303,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
             self.btn_stop.clicked.connect(self._request_stop)
             self.btn_markup.clicked.connect(self._show_markup_menu)
             self.btn_gear.clicked.connect(self._toggle_settings)
+            self.btn_storyboard.clicked.connect(self._open_storyboard)
             self.btn_close.clicked.connect(self.close)
 
             self.fps = Stepper("FPS", config.DEFAULT_VIDEO_FPS, 5, 1, 240)
@@ -308,7 +315,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
 
             self._normal_controls = [
                 self.btn_snip, self.btn_region, self.btn_arm,
-                self.btn_full, self.btn_arm_full, self.btn_stop, self.btn_gear, self.btn_close,
+                self.btn_full, self.btn_arm_full, self.btn_stop, self.btn_storyboard, self.btn_gear, self.btn_close,
             ]
             self._icons = [self.grip, self.rec_label, self.btn_markup, *self._normal_controls]
             self._settings = [self.fps, self.countdown, self.click_delay, self.audio, self.cursor_toggle]
@@ -709,6 +716,15 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
                     logging.warning("SetWindowDisplayAffinity failed for Super Snipper HUD")
             except Exception:
                 logging.exception("Unable to exclude Super Snipper HUD from capture")
+
+        def _open_storyboard(self) -> None:
+            self.markup.set_tool("pointer")
+            self.markup_menu.hide()
+            try:
+                subprocess.Popen(hud_launch_command(["--storyboard"]),
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+            except OSError as exc:
+                QtWidgets.QMessageBox.critical(self, "Storyboard could not start", str(exc))
 
         def _launch(self, args: list[str]) -> None:
             if self._capture_pending or self._record_process is not None or recording._active_recording_state():
