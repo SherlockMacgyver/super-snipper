@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 
-from . import config, docking, recording, winapi
+from . import config, docking, markup, recording, winapi
 
 
 def hud_launch_command(args: list[str]) -> list[str]:
@@ -292,7 +292,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
             self.btn_stop = IconButton("stop", "Stop recording", danger=True)
             self.btn_markup = IconButton("markup", "Markup tools for snips and recordings")
             self.btn_gear = IconButton("gear", "Capture settings")
-            self.btn_storyboard = IconButton("storyboard", "Create storyboard from a video")
+            self.btn_storyboard = IconButton("storyboard", "Create a storyboard from a video or from snips")
             self.btn_close = IconButton("close", "Hide panel (reopen from the tray or Win+Shift+X)")
 
             self.btn_snip.clicked.connect(lambda: self._launch(["--snip"]))
@@ -303,7 +303,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
             self.btn_stop.clicked.connect(self._request_stop)
             self.btn_markup.clicked.connect(self._show_markup_menu)
             self.btn_gear.clicked.connect(self._toggle_settings)
-            self.btn_storyboard.clicked.connect(self._open_storyboard)
+            self.btn_storyboard.clicked.connect(self._show_storyboard_menu)
             self.btn_close.clicked.connect(self.close)
 
             self.fps = Stepper("FPS", config.DEFAULT_VIDEO_FPS, 5, 1, 240)
@@ -375,8 +375,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
             self.markup_menu.addAction("Clear all", self.markup.clear)
             colors = self.markup_menu.addMenu("Color")
             color_group = QtGui.QActionGroup(colors)
-            for title, color in (("Red", "#ff4058"), ("Yellow", "#ffdc40"),
-                                 ("Blue", "#409cff"), ("White", "#ffffff")):
+            for title, color in markup.COLORS:
                 action = colors.addAction(title)
                 action.setCheckable(True)
                 action.setChecked(color == self.markup.color)
@@ -384,12 +383,15 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
                 action.triggered.connect(lambda checked=False, value=color: setattr(self.markup, "color", value))
             widths = self.markup_menu.addMenu("Width")
             width_group = QtGui.QActionGroup(widths)
-            for title, width in (("Thin", 2), ("Medium", 4), ("Thick", 8)):
+            for title, width in markup.WIDTHS:
                 action = widths.addAction(title)
                 action.setCheckable(True)
                 action.setChecked(width == self.markup.width)
                 width_group.addAction(action)
                 action.triggered.connect(lambda checked=False, value=width: setattr(self.markup, "width", value))
+            self.storyboard_menu = QtWidgets.QMenu(self)
+            self.storyboard_menu.addAction("From a video...", lambda: self._open_storyboard(["--storyboard"]))
+            self.storyboard_menu.addAction("From snips...", lambda: self._open_storyboard(["--series"]))
             self._record_timer = QtCore.QTimer(self)
             self._record_timer.setInterval(150)
             self._record_timer.timeout.connect(self._poll_recording_lifecycle)
@@ -435,6 +437,7 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
         def hide_panel(self) -> None:
             self.markup.set_tool("pointer")
             self.markup_menu.hide()
+            self.storyboard_menu.hide()
             self._user_hidden = True
             self.hide()
 
@@ -717,11 +720,14 @@ def _load_hud_class(QtCore, QtGui, QtWidgets):
             except Exception:
                 logging.exception("Unable to exclude Super Snipper HUD from capture")
 
-        def _open_storyboard(self) -> None:
+        def _show_storyboard_menu(self) -> None:
             self.markup.set_tool("pointer")
             self.markup_menu.hide()
+            self.storyboard_menu.popup(self.btn_storyboard.mapToGlobal(self.btn_storyboard.rect().bottomLeft()))
+
+        def _open_storyboard(self, args: list[str]) -> None:
             try:
-                subprocess.Popen(hud_launch_command(["--storyboard"]),
+                subprocess.Popen(hud_launch_command(args),
                                  creationflags=subprocess.CREATE_NO_WINDOW)
             except OSError as exc:
                 QtWidgets.QMessageBox.critical(self, "Storyboard could not start", str(exc))

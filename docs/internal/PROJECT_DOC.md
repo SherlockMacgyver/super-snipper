@@ -48,16 +48,43 @@ Qt actions are simulated; the native operating-system file picker is unverified.
 Run the focused file with `QT_QPA_PLATFORM=windows` after changing this flow.
 Source: video storyboard claim 7de88a2839354fee98480c8ed116d074.
 
+<a id="project/capture-series-storyboards"></a>
+### Snip storyboards
+
+**Root summary:** A separate window collects snips as ordered steps, marks each still, reuses an original without earlier marks, and stitches one PNG with the video storyboard layout rule.
+
+`supersnipper/series.py` holds the step model (an untouched original path plus
+marks in image pixels) and Qt rendering; `supersnipper/series_ui.py` is the
+window, opened by `--series` or the panel's storyboard menu (**From snips...**).
+Drawing reuses the live markup's tool geometry, colors and widths through
+`markup.load_ink_tools`, so both surfaces draw identical shapes. Capture runs the
+normal snip flow through the launcher with `--snip-output`, which reports the
+saved path; no output means a cancelled snip. Layout imports
+`storyboard.choose_grid`, owned by the video storyboard claim; mixed snip shapes
+share one cell shape (geometric mean of aspects) and are letterboxed on black.
+
+Steps live only in the open window; there is no saved series file, captions,
+clipboard copy or multi-sheet output. Stitching runs on the GUI thread. A
+missing or resized original fails the sheet with nothing written.
+`tests/test_super_snipper_series.py` drives the real window, real launcher
+capture via `--capture-box`, saved pixels, reuse isolation and unchanged
+originals; three mutations (marks copied on reuse, reversed order, marks not
+rendered) each turned it red. The interactive snip selector, native file picker
+and installed tray are untested.
+Source: capture-series storyboard claim 52d9795543b34fda897e80bee1159227.
+
 <a id="project/gaps"></a>
 ## Open Gaps
 
-**Root summary:** Installed-tray activation, broad codec and variable-rate input coverage, and physical multi-monitor UI behavior still need witnesses.
+**Root summary:** Installed-tray activation, broad codec and variable-rate input coverage, physical multi-monitor UI behavior and the interactive snip selector in snip storyboards still need witnesses.
 
 This change does not switch the running tray to this repository. Broad codec,
 variable-frame-rate and physical multi-monitor behavior remain unverified.
 FFmpeg's container duration can exceed the video stream in unusual files;
 an unavailable sample fails the export rather than shortening it silently.
 Clipboard and multi-sheet output were discussed but are not part of this implementation.
+Snip storyboards keep steps only while their window is open, stitch on the GUI
+thread, and have no witness yet for the interactive snip selector or native file picker.
 
 <a id="project/reference"></a>
 ## Reference

@@ -10,10 +10,83 @@ import logging
 
 from . import winapi
 
+TOOLS = ("pointer", "pen", "rectangle", "ellipse", "arrow", "eraser")
+COLORS = (("Red", "#ff4058"), ("Yellow", "#ffdc40"), ("Blue", "#409cff"), ("White", "#ffffff"))
+WIDTHS = (("Thin", 2), ("Medium", 4), ("Thick", 8))
+ERASER_WIDTH = 20
+
+
+def load_ink_tools(QtCore, QtGui):
+    """Stroke geometry shared by the live-screen overlay and the still-image canvas."""
+    Qt = QtCore.Qt
+
+    def shape(tool, start, point, width, path=None):
+        """Return the draft path for a drag from start to point; pen extends path."""
+        if tool == "pen":
+            path.lineTo(point)
+            return path
+        path = QtGui.QPainterPath()
+        rect = QtCore.QRectF(start, point).normalized()
+        if tool == "rectangle":
+            path.addRect(rect)
+        elif tool == "ellipse":
+            path.addEllipse(rect)
+        elif tool == "arrow":
+            path.moveTo(start)
+            path.lineTo(point)
+            angle = math.atan2(point.y() - start.y(), point.x() - start.x())
+            length = min(max(12, width * 4), math.hypot(
+                point.x() - start.x(), point.y() - start.y()) * 0.45)
+            for delta in (-0.5, 0.5):
+                path.moveTo(point)
+                path.lineTo(point - QtCore.QPointF(
+                    length * math.cos(angle + delta), length * math.sin(angle + delta)))
+        return path
+
+    def dot(point):
+        path = QtGui.QPainterPath(point)
+        path.lineTo(point + QtCore.QPointF(0.01, 0))
+        return path
+
+    def erase(paths, previous, current, eraser_width=ERASER_WIDTH):
+        """Strokes not touched by an eraser sweep from previous to current."""
+        sweep = QtGui.QPainterPath(previous)
+        sweep.lineTo(current)
+        if previous == current:
+            sweep.lineTo(current + QtCore.QPointF(0.01, 0))
+        brush = QtGui.QPainterPathStroker()
+        brush.setWidth(eraser_width)
+        brush.setCapStyle(Qt.PenCapStyle.RoundCap)
+        area = brush.createStroke(sweep)
+        kept = []
+        for path, color, width in paths:
+            outline = QtGui.QPainterPathStroker()
+            outline.setWidth(width)
+            if not area.intersects(outline.createStroke(path)):
+                kept.append((path, color, width))
+        return kept
+
+    def paint(painter, strokes):
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for path, color, width in strokes:
+            pen = QtGui.QPen(QtGui.QColor(color), width)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.drawPath(path)
+
+    class InkTools:
+        pass
+
+    tools = InkTools()
+    tools.shape, tools.dot, tools.erase, tools.paint = shape, dot, erase, paint
+    return tools
+
 
 def load_markup_class(QtCore, QtGui, QtWidgets):
     """Keep importing the capture CLI independent of Qt initialization."""
     Qt = QtCore.Qt
+    ink = load_ink_tools(QtCore, QtGui)
 
     class InkOverlay(QtWidgets.QWidget):
         def __init__(self, screen, controller):
@@ -75,31 +148,11 @@ def load_markup_class(QtCore, QtGui, QtWidgets):
             # complete transparency and native window-level input pass-through.
             if self.controller.tool != "pointer":
                 painter.fillRect(self.rect(), QtGui.QColor(0, 0, 0, 1))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            for path, color, width in self.paths + ([self.draft] if self.draft else []):
-                pen = QtGui.QPen(QtGui.QColor(color), width)
-                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                painter.setPen(pen)
-                painter.drawPath(path)
+            ink.paint(painter, self.paths + ([self.draft] if self.draft else []))
             painter.end()
 
         def erase(self, previous, current):
-            sweep = QtGui.QPainterPath(previous)
-            sweep.lineTo(current)
-            if previous == current:
-                sweep.lineTo(current + QtCore.QPointF(0.01, 0))
-            brush = QtGui.QPainterPathStroker()
-            brush.setWidth(20)
-            brush.setCapStyle(Qt.PenCapStyle.RoundCap)
-            area = brush.createStroke(sweep)
-            kept = []
-            for path, color, width in self.paths:
-                outline = QtGui.QPainterPathStroker()
-                outline.setWidth(width)
-                if not area.intersects(outline.createStroke(path)):
-                    kept.append((path, color, width))
-            self.paths = kept
+            self.paths = ink.erase(self.paths, previous, current)
             self.update()
 
         def mousePressEvent(self, event):
@@ -115,9 +168,7 @@ def load_markup_class(QtCore, QtGui, QtWidgets):
             if self.controller.tool == "eraser":
                 self.erase(point, point)
             else:
-                path = QtGui.QPainterPath(point)
-                path.lineTo(point + QtCore.QPointF(0.01, 0))
-                self.draft = (path, self.controller.color, self.controller.width)
+                self.draft = (ink.dot(point), self.controller.color, self.controller.width)
             self.update()
             event.accept()
 
@@ -127,26 +178,7 @@ def load_markup_class(QtCore, QtGui, QtWidgets):
                 self.erase(self.previous, point)
             elif self.draft is not None:
                 path, color, width = self.draft
-                if tool == "pen":
-                    path.lineTo(point)
-                else:
-                    path = QtGui.QPainterPath()
-                    rect = QtCore.QRectF(self.start, point).normalized()
-                    if tool == "rectangle":
-                        path.addRect(rect)
-                    elif tool == "ellipse":
-                        path.addEllipse(rect)
-                    elif tool == "arrow":
-                        path.moveTo(self.start)
-                        path.lineTo(point)
-                        angle = math.atan2(point.y() - self.start.y(), point.x() - self.start.x())
-                        length = min(max(12, width * 4), math.hypot(
-                            point.x() - self.start.x(), point.y() - self.start.y()) * 0.45)
-                        for delta in (-0.5, 0.5):
-                            path.moveTo(point)
-                            path.lineTo(point - QtCore.QPointF(
-                                length * math.cos(angle + delta), length * math.sin(angle + delta)))
-                self.draft = (path, color, width)
+                self.draft = (ink.shape(tool, self.start, point, width, path), color, width)
             self.previous = point
             self.update()
 
@@ -258,7 +290,7 @@ def load_markup_class(QtCore, QtGui, QtWidgets):
             dialog.open()
 
         def set_tool(self, tool):
-            if tool not in ("pointer", "pen", "rectangle", "ellipse", "arrow", "eraser"):
+            if tool not in TOOLS:
                 raise ValueError(f"Unknown markup tool: {tool}")
             if tool != "pointer":
                 self.active = True

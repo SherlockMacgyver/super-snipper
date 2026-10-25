@@ -217,7 +217,17 @@ def test_hud_storyboard_button_is_wired(monkeypatch, tmp_path):
         app.processEvents()
         assert hud.btn_storyboard.isVisible()
         hud.btn_storyboard.click()
-        assert launched == [snipper.hud_launch_command(["--storyboard"])]
+        app.processEvents()
+        assert hud.storyboard_menu.isVisible() and not launched
+        video, snips = hud.storyboard_menu.actions()
+        assert (video.text(), snips.text()) == ("From a video...", "From snips...")
+        video.trigger()
+        snips.trigger()
+        assert launched == [snipper.hud_launch_command(["--storyboard"]),
+                            snipper.hud_launch_command(["--series"])]
+        hud.hide_panel()
+        assert not hud.storyboard_menu.isVisible()
+        hud.show_panel()
         hud._set_recording_mode(True)
         assert not hud.btn_storyboard.isVisible()
     finally:

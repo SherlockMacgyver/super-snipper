@@ -23,7 +23,7 @@
 <a id="manual/using-it"></a>
 ## Using it
 
-For video storyboards, click the panel's grid button, choose a local video,
+For video storyboards, click the panel's grid button, choose **From a video...**, pick a local video,
 then set frames per second or minute and the maximum sheet edge in pixels.
 The preview reports frame count, order, tile size, blank cells and actual rate.
 Keep the requested rate or explicitly select a lower/higher full-grid option.
@@ -33,6 +33,14 @@ Cancel or close stops work; Open saved image opens the completed sheet.
 The complete usage, command-line examples, limits and failure behavior are in
 [Video storyboards](../../README.md#video-storyboards). FFmpeg must be installed
 separately; selecting a storyboard rate does not change video recording settings.
+
+For snip storyboards, choose **From snips...** instead. Capture each step with
+**Capture snip** (or add an existing picture), draw on the selected step, and use
+**Reuse this snip** to mark the same screen again without the earlier marks.
+Reorder or remove steps, then **Create storyboard** saves one ordered PNG to
+`Pictures\Screenshots`. Originals are never changed; closing with unsaved steps
+asks first. Full steps and limits are in
+[Snip storyboards](../../README.md#capture-series-storyboards).
 
 <a id="manual/reference"></a>
 ## Reference

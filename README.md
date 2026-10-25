@@ -22,6 +22,7 @@ with no account required.
 | Armed recording | Choose a screen point to click automatically shortly after capture starts. |
 | Dockable panel | Float the panel or dock it along the left, right, top or bottom edge. |
 | Capture controls | Adjust frame rate, countdown, armed-click delay, audio and cursor visibility. |
+| Storyboards | Turn a video into an ordered grid of sampled frames, or collect snips, mark up each one and stitch them in order. |
 | Tray and hotkeys | Show or hide the panel, start or stop capture, reset its position, and exit. |
 
 ## Requirements
@@ -149,9 +150,11 @@ Drag to draw. The menu also provides Color, Width, Eraser and Clear all.
 <a id="video-storyboards"></a>
 ## Video storyboards
 
-Click the panel's grid button (**Create storyboard from a video**) to turn a
+Click the panel's grid button and choose **From a video...** to turn a
 recording or another video file into one ordered PNG collage. This opens a
 separate window; it does not change the recording rate or capture area.
+(**From snips...** builds a storyboard from snips instead; see
+[Snip storyboards](#capture-series-storyboards).)
 
 1. **Choose video** selects a local file that your installed FFmpeg can decode.
 2. Set the sample rate in **frames per minute** or **frames per second**.
@@ -204,6 +207,54 @@ default offscreen test surface. This does not install or replace a running tray.
 Window tests use simulated Qt actions with real decoding; they do not exercise
 the native operating-system file picker or prove installed-tray activation.
 
+<a id="capture-series-storyboards"></a>
+## Snip storyboards
+
+Click the panel's grid button and choose **From snips...** to build a
+step-by-step storyboard from still snips. The window lists the steps in order
+on the left and shows the selected step on the right, where you draw on it.
+
+1. **Capture snip** hides the window and opens the normal snip selector. The
+   snip is saved and copied to the clipboard as usual, then added as the next
+   step. Press Esc in the selector to cancel; no step is added.
+   **Add image...** adds an existing picture instead.
+2. Draw on the selected step with **Pen**, **Arrow**, **Rectangle**,
+   **Ellipse** or **Eraser** (removes whole marks), in the same colors and
+   widths as live markup. **Undo** removes the step's last mark; **Clear marks**
+   removes all of them. Marks scale up on large snips so they stay visible
+   after the sheet is shrunk.
+3. **Reuse this snip** adds a new step right after the selected one, on the
+   same original picture but with no marks, so you can mark the next part of
+   the same screen. Earlier marks never carry forward.
+4. **Move up**, **Move down** and **Remove step** fix the order.
+5. Choose the **maximum sheet edge** and click **Create storyboard**. The
+   summary line shows the grid, empty cells and sheet size first.
+
+Steps read left to right, then down, using the same layout rule as video
+storyboards: the largest cells first, fewer empty cells as the tiebreaker.
+Snips of different shapes share one cell shape (the average of their
+proportions) and are centered on black, with their proportions kept. The PNG
+is saved to `Pictures\Screenshots` as `SuperSnip Storyboard <time>.png`, and
+**Open saved image** opens it. Nothing is copied to the clipboard and there are
+no captions or multiple sheets in this version.
+
+Original snips are never changed; marks exist only in this window and in the
+saved sheet. Closing the window with unsaved steps asks first, because the
+steps and marks are not kept. If an original is deleted or changes size before
+you create the sheet, nothing is saved and the window names the file.
+
+```powershell
+# Open the snip storyboard window without the tray.
+python super_snipper.py --series
+```
+
+Run `python -m pytest tests/test_super_snipper_series.py -q` (add
+`QT_QPA_PLATFORM=windows` for a native window). The tests drive the real window,
+capture through the real launcher with `--capture-box`, and check saved pixels:
+step order, marks only on their own step, and unchanged originals. They do not
+exercise the interactive snip selector, the native file picker, or the
+installed tray.
+
 ## Saved files, logs and failed recordings
 
 Screenshots go to `Pictures\Screenshots`; videos go to `Videos\Captures` under
@@ -246,7 +297,9 @@ python super_snipper.py --stop-recording
 `--record-region` opens a region selector; `--record-box left,top,right,bottom`
 uses physical pixels measured from the top-left of the virtual desktop.
 `--fps`, `--countdown`, `--arm-click` and
-`--click-delay-ms` control recording setup. Run `--help` for the complete list.
+`--click-delay-ms` control recording setup. `--snip-output FILE` makes `--snip`
+or `--capture-box` write the saved file's path to FILE (nothing is written when
+the snip is cancelled). Run `--help` for the complete list.
 Direct capture commands still save files to the normal capture folders.
 
 ## Updating and uninstalling
