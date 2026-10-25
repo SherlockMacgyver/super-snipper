@@ -31,6 +31,12 @@ def self_test() -> int:
     return 0
 
 
+def _report_snip(output, path) -> None:
+    """Tell a calling window which file a snip saved; a cancelled snip writes nothing."""
+    if output and path:
+        Path(output).write_text(str(path), encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="DPI-aware region snipper")
     parser.add_argument("--snip", action="store_true", help="open the region snipper")
@@ -52,6 +58,8 @@ def main() -> int:
     parser.add_argument("--sample-rate", type=float, default=6, help="storyboard samples per --sample-unit (default 6 per minute)")
     parser.add_argument("--sample-unit", choices=("second", "minute"), default="minute")
     parser.add_argument("--sheet-edge", type=int, default=2048, help="maximum storyboard edge in pixels (64-4096)")
+    parser.add_argument("--series", action="store_true", help="open the snip storyboard window: capture, mark up and stitch snips in order")
+    parser.add_argument("--snip-output", metavar="FILE", help="after --snip or --capture-box saves, write the saved path to FILE")
     parser.add_argument("--capture-box", help="capture left,top,right,bottom physical pixels")
     parser.add_argument("--no-clipboard", action="store_true", help="skip clipboard copy")
     parser.add_argument("--no-audio", action="store_true", help="record video without computer audio")
@@ -80,6 +88,9 @@ def main() -> int:
         print(f"storyboard={output}")
         print(f"frames={plan.grid.count} grid={plan.grid.columns}x{plan.grid.rows} rate_per_second={plan.rate:.9g}")
         return 0
+    if args.series:
+        from .series_ui import run_series_window
+        return run_series_window()
     if args.cancel_event:
         winapi._CANCEL_EVENT = winapi._capture_event(args.cancel_event)
         winapi._check_capture_cancelled()
@@ -101,7 +112,8 @@ def main() -> int:
         panel.show_control_panel(args.panel_command or "show")
         return 0
     if args.capture_box:
-        capture.capture_box(args.capture_box, copy=not args.no_clipboard, prefix="SuperSnip Test")
+        _report_snip(args.snip_output, capture.capture_box(
+            args.capture_box, copy=not args.no_clipboard, prefix="SuperSnip Test"))
         return 0
     if args.stop_recording:
         recording.stop_recording()
@@ -175,7 +187,7 @@ def main() -> int:
         )
 
     try:
-        capture.capture_snip()
+        _report_snip(args.snip_output, capture.capture_snip())
         return 0
     except Exception:
         logging.exception("Super Snipper failed")
