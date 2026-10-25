@@ -221,3 +221,21 @@ def test_hud_offers_snip_storyboards_and_real_launcher_window(tmp_path):
         if process.poll() is None:
             process.kill()
             process.communicate()
+
+
+def test_reuse_with_missing_original_leaves_list_consistent(window, tmp_path):
+    # Anvil's repro: add, move the original away, Reuse -> no ghost step, signals restored.
+    app, dialog = window
+    original = solid(tmp_path / "gone.png", RED)
+    dialog.add_image(original)
+    original.rename(tmp_path / "moved.png")
+    dialog.btn_reuse.click()
+    assert len(dialog.steps) == 1 and dialog.list.count() == 1
+    assert dialog.status.text().startswith("Could not reuse this snip: Cannot read image")
+    assert not dialog.list.signalsBlocked()
+    dialog.btn_remove.click()
+    assert dialog.steps == [] and dialog.list.count() == 0
+    assert not dialog.btn_create.isEnabled()
+    with pytest.raises(OSError):
+        dialog.add_image(original)  # a missing file never becomes a step
+    assert dialog.steps == [] and dialog.list.count() == 0

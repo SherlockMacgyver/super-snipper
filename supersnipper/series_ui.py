@@ -235,8 +235,11 @@ def load_series_dialog(QtCore, QtGui, QtWidgets):
             return self.steps[row] if 0 <= row < len(self.steps) else None
 
         def insert_step(self, step):
+            """Add a step only after its original renders; a failure leaves the list unchanged."""
+            icon = QtGui.QIcon(QtGui.QPixmap.fromImage(tools.thumbnail(step, None, 112)))
             row = self.list.currentRow() + 1 if self.current() else len(self.steps)
             self.steps.insert(row, step)
+            self._icons[step] = icon
             self.dirty = True
             self.refresh(row)
 
@@ -248,7 +251,10 @@ def load_series_dialog(QtCore, QtGui, QtWidgets):
         def reuse_step(self):
             step = self.current()
             if step is not None:
-                self.insert_step(series.Step(step.original, step.width, step.height))
+                try:
+                    self.insert_step(series.Step(step.original, step.width, step.height))
+                except ValueError as exc:
+                    self.status.setText(f"Could not reuse this snip: {exc}")
 
         def remove_step(self):
             row = self.list.currentRow()
@@ -267,14 +273,16 @@ def load_series_dialog(QtCore, QtGui, QtWidgets):
 
         def refresh(self, select=None):
             self.list.blockSignals(True)
-            self.list.clear()
-            for index, step in enumerate(self.steps):
-                item = QtWidgets.QListWidgetItem(f"Step {index + 1}\n{step.original.name}")
-                if step not in self._icons:
-                    self._icons[step] = QtGui.QIcon(QtGui.QPixmap.fromImage(tools.thumbnail(step, None, 112)))
-                item.setIcon(self._icons[step])
-                self.list.addItem(item)
-            self.list.blockSignals(False)
+            try:
+                self.list.clear()
+                # Steps enter only through insert_step with a cached icon, so refresh never
+                # reads the disk and the list cannot drift from self.steps.
+                for index, step in enumerate(self.steps):
+                    item = QtWidgets.QListWidgetItem(f"Step {index + 1}\n{step.original.name}")
+                    item.setIcon(self._icons[step])
+                    self.list.addItem(item)
+            finally:
+                self.list.blockSignals(False)
             if select is not None and 0 <= select < len(self.steps):
                 self.list.setCurrentRow(select)
             self.select_step(self.list.currentRow())
