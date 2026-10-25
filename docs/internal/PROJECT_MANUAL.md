@@ -18,7 +18,16 @@
 <a id="manual/getting-started"></a>
 ## Getting started
 
-<!-- Not written yet. -->
+Download the Windows x64 setup executable from the repository's GitHub Releases
+page and run it. Python, hotkey support and FFmpeg are included. Setup installs
+for your Windows user, offers sign-in startup and a desktop shortcut, and can
+launch the capture panel when finished. No separate dependency installation is
+needed. The build is unsigned, so Windows may warn or block; read the README's
+download guidance before proceeding.
+
+To update, exit Super Snipper and run the newer Setup. To remove it, use Windows
+Installed apps. Screenshots, recordings and application settings/logs are kept.
+The [README](../../README.md#install) also covers source installs and portable ZIP use.
 
 <a id="manual/using-it"></a>
 ## Using it
@@ -31,8 +40,9 @@ Create saves one PNG beside the video, with a numbered suffix if needed.
 Cancel or close stops work; Open saved image opens the completed sheet.
 
 The complete usage, command-line examples, limits and failure behavior are in
-[Video storyboards](../../README.md#video-storyboards). FFmpeg must be installed
-separately; selecting a storyboard rate does not change video recording settings.
+[Video storyboards](../../README.md#video-storyboards). Packaged builds include
+FFmpeg; source installs supply it separately. Selecting a storyboard rate does
+not change video recording settings.
 
 For snip storyboards, choose **From snips...** instead. Capture each step with
 **Capture snip** (or add an existing picture), draw on the selected step, and use

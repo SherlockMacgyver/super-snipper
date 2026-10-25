@@ -18,7 +18,7 @@ from . import config, docking, markup, recording, winapi
 
 def hud_launch_command(args: list[str]) -> list[str]:
     """Command that re-runs the Super Snipper launcher with the given capture args."""
-    return [sys.executable, str(config.ENTRY_SCRIPT), *args]
+    return config.launch_command(args)
 
 
 def _load_hud_class(QtCore, QtGui, QtWidgets):

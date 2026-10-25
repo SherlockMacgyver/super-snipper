@@ -1,0 +1,70 @@
+Super Snipper third-party software
+=================================
+
+Super Snipper's own code is MIT licensed (see LICENSE). The following separate
+programs and dynamically loaded libraries retain their respective licenses.
+This notice grants no ownership over those components and places no restriction
+on modification, reverse engineering for debugging modifications, or replacement
+of LGPL libraries. No paid signing or paid runtime is required.
+
+FFmpeg 9.0.2, x264 snapshot 0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee,
+and zlib 1.3.2
+  FFmpeg is a separate executable built for this release from pinned source,
+  with GPL-enabled libx264 and zlib. The resulting FFmpeg executable is GPL
+  version 2 or later; the individual COPYING files are under licenses/FFmpeg.
+  x264 is GPL version 2 or later; zlib uses the zlib license. Source archives,
+  exact configure/build recipe and input hashes accompany every binary release
+  in SuperSnipper-VERSION-sources.zip at the same release download location.
+  No nonfree FFmpeg components are enabled. Windows system libraries are used
+  for screen capture. See packaging/build_ffmpeg.py for the build commands.
+  https://ffmpeg.org/  https://www.videolan.org/developers/x264.html
+  https://zlib.net/
+
+AutoHotkey 2.0.25
+  A separate, unmodified AutoHotkey64.exe runs our MIT-licensed hotkey script.
+  AutoHotkey is GPL version 2. Its license is licenses/AutoHotkey/license.txt;
+  the exact upstream version source archive accompanies the release.
+  https://github.com/AutoHotkey/AutoHotkey
+
+Qt 6.11.1, PySide6-Essentials 6.11.1 and shiboken6 6.11.1
+  Used under the LGPL version 3 option. Only Qt Core, Gui, Widgets, Network,
+  Svg (used by plugins) and the plugins listed in file-manifest.json are included. License texts and
+  third-party notices are under licenses/Qt and in the supplied source trees.
+  Qt/PySide shared libraries are in _internal/PySide6 and _internal/shiboken6.
+  They are not sealed at runtime: users may replace them with ABI-compatible
+  modified builds. The application source and build recipe are also supplied
+  so a modified dependency can be used to rebuild the whole application.
+  Qt base, SVG, image formats and PySide/shiboken source archives for these
+  exact versions accompany the release. See their included build instructions.
+  https://doc.qt.io/qt-6/licensing.html
+  https://doc.qt.io/qtforpython-6/licenses.html
+
+CPython 3.14.3
+  PSF License and bundled third-party notices: licenses/Python-LICENSE.txt.
+  The runtime includes Tcl/Tk for region selection, with its own notices in
+  licenses/python-runtime. https://www.python.org/
+
+Python packages
+  Pillow 12.1.1 (HPND and included dependency licenses), NumPy 2.4.2 (BSD
+  and bundled dependencies), psutil 7.2.2 (BSD), SoundCard 0.4.6 (BSD),
+  cffi 2.0.0 (MIT), pycparser 3.0 (BSD). Their installed distribution metadata
+  and license files are copied into licenses/python-packages. Consult those
+  files for the full texts and copyrights, including statically bundled libs.
+
+PyInstaller 6.22.3 bootloader
+  GPL with the PyInstaller bootloader distribution exception. The exception
+  permits distributing this application under its own license. License and
+  exception text are included under licenses/python-packages and licenses/python-runtime.
+  https://pyinstaller.org/en/stable/license.html
+
+MinGW-w64 runtime
+  The native codec build uses w64devkit 2.10.1. Its concatenated runtime license
+  notices are included as licenses/COPYING.MinGW-w64-runtime.txt. GCC runtime
+  libraries are covered by their runtime exception where applicable.
+
+Source and binary releases:
+  https://github.com/SherlockMacgyver/super-snipper/releases
+The sources ZIP is a required companion to the installer and application ZIP,
+not an optional future promise. Binary release publication must include it.
+Building still needs the pinned compiler, assembler and Python tool dependencies
+from their documented upstream URLs; this is not a self-contained offline SDK.

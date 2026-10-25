@@ -29,8 +29,16 @@ def _data_dir() -> Path:
 
 
 # The folder holding the launcher script and this package.
-APP_DIR = Path(__file__).resolve().parents[1]
+FROZEN = bool(getattr(sys, "frozen", False))
+APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parents[1]
 ENTRY_SCRIPT = APP_DIR / "super_snipper.py"
+
+
+def launch_command(args: list[str]) -> list[str]:
+    """Every child uses this installation, without requiring system Python."""
+    if FROZEN:
+        return [str(APP_DIR / "SuperSnipper.exe"), *args]
+    return [sys.executable, str(ENTRY_SCRIPT), *args]
 
 DATA_DIR = _data_dir()
 LOG_FILE = DATA_DIR / "super_snipper.log"

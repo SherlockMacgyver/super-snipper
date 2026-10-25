@@ -9,6 +9,8 @@ script's folder on sys.path when it is run directly.
 import sys
 
 if __name__ == "__main__":
+    if getattr(sys, "frozen", False) and len(sys.argv) == 1:
+        sys.argv.append("--tray")
     try:
         from supersnipper.cli import run
     except ImportError as exc:
