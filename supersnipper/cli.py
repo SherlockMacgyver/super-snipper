@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import logging
+import subprocess
+import sys
 from pathlib import Path
 
 from PIL import ImageGrab
@@ -40,6 +43,7 @@ def _report_snip(output, path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="DPI-aware region snipper")
     parser.add_argument("--snip", action="store_true", help="open the region snipper")
+    parser.add_argument("--tray", action="store_true", help="start bundled tray/hotkeys and show the panel")
     parser.add_argument("--record-region", action="store_true", help="select a region and record MP4 video")
     parser.add_argument("--record-fullscreen", action="store_true", help="record the full virtual desktop")
     parser.add_argument("--record-box", help="record left,top,right,bottom physical pixels")
@@ -54,6 +58,7 @@ def main() -> int:
     parser.add_argument("--hud-settings", action="store_true", help="render --render-hud with the settings row expanded")
     parser.add_argument("--stop-recording", action="store_true", help="stop the active video recording")
     parser.add_argument("--self-test", action="store_true", help="print capture diagnostics")
+    parser.add_argument("--diagnostics", metavar="FILE", help="write runtime/dependency diagnostics as JSON")
     parser.add_argument("--storyboard", nargs="?", const="", metavar="VIDEO", help="open video storyboard window, or export VIDEO with the options below")
     parser.add_argument("--sample-rate", type=float, default=6, help="storyboard samples per --sample-unit (default 6 per minute)")
     parser.add_argument("--sample-unit", choices=("second", "minute"), default="minute")
@@ -77,6 +82,30 @@ def main() -> int:
     args = parser.parse_args()
 
     config.setup_logging()
+    if args.diagnostics:
+        import psutil
+        import soundcard
+        from PySide6 import QtCore
+        ffmpeg = recording.resolve_ffmpeg()
+        payload = {"frozen": config.FROZEN, "executable": sys.executable,
+                   "app_dir": str(config.APP_DIR), "ffmpeg": str(ffmpeg),
+                   "qt": QtCore.qVersion(), "python": sys.version,
+                   "child_command": config.launch_command(["--self-test"]),
+                   "loaded_files": sorted({entry.path for entry in psutil.Process().memory_maps()}),
+                   "audio_backend": soundcard.__name__}
+        Path(args.diagnostics).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return 0
+    if args.tray:
+        if not config.FROZEN:
+            raise RuntimeError("--tray requires the packaged app; source users run the AutoHotkey script.")
+        interpreter = config.APP_DIR / "bin" / "AutoHotkey64.exe"
+        script = config.APP_DIR / "super_snipper_hotkey.ahk"
+        if not interpreter.is_file() or not script.is_file():
+            raise FileNotFoundError("Bundled hotkey support is missing. Reinstall Super Snipper.")
+        subprocess.Popen([str(interpreter), str(script)], cwd=config.APP_DIR,
+                         **winapi.hidden_subprocess_kwargs(new_process_group=False))
+        panel.show_control_panel("show")
+        return 0
     if args.storyboard is not None:
         if not args.storyboard:
             from .storyboard_ui import run_storyboard_window

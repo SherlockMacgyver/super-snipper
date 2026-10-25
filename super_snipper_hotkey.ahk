@@ -9,6 +9,11 @@ pythonw := EnvGet("SUPER_SNIPPER_PYTHONW")
 if (pythonw = "")
     pythonw := "pythonw.exe"
 script := A_ScriptDir "\super_snipper.py"
+packaged := A_ScriptDir "\SuperSnipper.exe"
+if FileExist(packaged)
+    launch := '"' packaged '"'
+else
+    launch := '"' pythonw '" "' script '"'
 workdir := A_ScriptDir
 exiting := false
 
@@ -47,11 +52,11 @@ A_TrayMenu.Add()
 A_TrayMenu.Add("Exit Super Snipper", ExitSnipper)
 
 SendCommand(command, *) {
-    global pythonw, script, workdir, exiting
+    global launch, workdir, exiting
     if exiting && command != "exit"
         return 1
     try {
-        return RunWait('"' pythonw '" "' script '" --panel-command ' command, workdir, "Hide")
+        return RunWait(launch ' --panel-command ' command, workdir, "Hide")
     } catch as err {
         MsgBox("Super Snipper could not launch:`n" err.Message, "Super Snipper error", "Iconx")
         return 1

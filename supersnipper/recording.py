@@ -24,7 +24,12 @@ from . import capture, config, overlays, winapi
 
 
 def resolve_ffmpeg() -> Path:
-    """SUPER_SNIPPER_FFMPEG when set, otherwise ffmpeg on PATH; never a guess."""
+    """Bundled codec when frozen; source uses explicit environment or PATH."""
+    if config.FROZEN:
+        bundled = config.APP_DIR / "bin" / "ffmpeg.exe"
+        if not bundled.is_file():
+            raise FileNotFoundError(f"Bundled FFmpeg is missing: {bundled}. Reinstall Super Snipper.")
+        return bundled
     env_path = os.environ.get("SUPER_SNIPPER_FFMPEG")
     if env_path:
         path = Path(env_path)

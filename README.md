@@ -27,6 +27,11 @@ with no account required.
 
 ## Requirements
 
+- For the Windows x64 installer: Windows 10 (1809 or later) or Windows 11.
+  Python, the hotkey runtime, FFmpeg and the Python libraries are included.
+  You do not install them separately or change your system Python.
+- The following requirements apply when running **from source**:
+
 - **Windows.** Tested on Windows 11 with a 4K display at 225% scaling.
 - **Python 3.14**, the version used for verification, with Tk support and the
   packages in [super_snipper_requirements.txt](super_snipper_requirements.txt).
@@ -41,6 +46,26 @@ Python, AutoHotkey and FFmpeg are installed separately; their binaries are not
 included here. Python packages are installed with pip.
 
 ## Install
+
+For normal use, download the **Windows x64 setup executable** from
+[GitHub Releases](https://github.com/SherlockMacgyver/super-snipper/releases),
+run it and launch Super Snipper. It installs for the current Windows user
+without administrator access. The setup offers a sign-in startup shortcut
+(selected by default) and an optional desktop shortcut. No account is needed.
+
+This release is **unsigned**. Windows may show an unknown-publisher or SmartScreen
+warning, and some Windows 11 Smart App Control configurations may block it.
+Where Windows offers **More info > Run anyway**, proceed only if you trust the
+release and have verified the download. A bypass is not available on every PC;
+do not disable your security protection just to run the app. Checksums are
+published in `SHA256SUMS.txt`; they check integrity, not publisher identity.
+
+The application ZIP contains the same program files as Setup and can be
+extracted and run with `SuperSnipper.exe`. It creates no shortcuts or uninstall
+registration by itself. `SuperSnipperCLI.exe` provides console output for
+automation. Keep the entire folder together, including `_internal` and `bin`.
+
+### Install from source
 
 Open PowerShell in the directory where you want to keep the application:
 
@@ -184,8 +209,8 @@ are allowed per sheet; lower the rate for longer videos. A smaller count often
 helps readability more than a higher resolution. AI services may resize uploads;
 the resolution field is a pixel size, not a guarantee about any model's limits.
 
-FFmpeg is the same external dependency used for recording, selected through
-`SUPER_SNIPPER_FFMPEG` or PATH. No additional binary is bundled. Files with no
+Packaged builds use their included FFmpeg. Source builds select FFmpeg through
+`SUPER_SNIPPER_FFMPEG` or PATH. Files with no
 readable duration, missing video, undecodable requested frames, or unwritable
 output folders fail visibly instead of silently dropping frames. A seek that
 takes over 90 seconds for one frame stops the export. Duration comes from the
@@ -304,6 +329,20 @@ Direct capture commands still save files to the normal capture folders.
 
 ## Updating and uninstalling
 
+For an installed package, choose **Exit Super Snipper**, then run the newer
+Setup. Setup refuses to replace or uninstall its running application. Versioned
+program folders let a newer installation update its shortcuts without treating
+your capture folders as program files. Existing recorded versions remain owned
+by the installer's uninstall log and are removed on uninstall.
+
+Uninstall through Windows **Installed apps > Super Snipper > Uninstall**.
+Your screenshots, recordings and `%LOCALAPPDATA%\SuperSnipper` settings/logs
+are kept. No system Python, AutoHotkey installation or system environment
+variables are removed. The portable ZIP is updated by extracting a new version
+to a separate folder after exiting; it has no automatic updater.
+
+For source installations:
+
 Before updating, choose **Exit Super Snipper** and wait for any recording to
 finish. Update this checkout, reinstall requirements if they changed, then rerun
 the installer from the permanent application folder.
@@ -332,7 +371,7 @@ also exercised drawing, click-through, keyboard focus and encoded ink continuity
 - Computer-audio capture depends on the output device. Verify a short sample
   before relying on it for a long recording.
 - Apps that continuously force themselves above other windows may cover marks.
-- This is a source release; there is no bundled executable or automatic updater.
+- Installer and application ZIP builds are provided; there is no standalone automatic updater.
 
 Run tests from the repository root with the requirements, pytest and FFmpeg
 available. The Windows installer checks also require AutoHotkey v2:
@@ -352,8 +391,88 @@ Passing them does not replace a real desktop capture check after changing the
 capture or markup code. When reporting a bug, include Windows/Python versions,
 display scaling, reproduction steps and relevant logs, removing private details.
 
+<a id="packaged-build"></a>
+## Building and verifying the Windows release
+
+Build on Windows x64 with **CPython 3.14.3** and Inno Setup 6. The build uses an
+isolated virtual environment; it does not install tools into the system Python.
+The compiler, assembler, AutoHotkey and upstream source URLs/checksums are pinned
+in `packaging/inputs.json`. Python build/runtime versions are pinned in
+`packaging/requirements-build.txt`. The build needs internet access for those
+inputs. A first FFmpeg build can take several minutes.
+
+```powershell
+C:\Python314\python.exe -m venv .build/venv
+.build/venv/Scripts/python.exe -m pip install -r packaging/requirements-build.txt
+.build/venv/Scripts/python.exe packaging/fetch_inputs.py
+.build/venv/Scripts/python.exe packaging/build_ffmpeg.py
+# Set this if Inno Setup is not under LocalAppData\Programs\Inno Setup 6.
+$env:SUPER_SNIPPER_ISCC = "C:\path\to\Inno Setup 6\ISCC.exe"
+.build/venv/Scripts/python.exe packaging/build_release.py
+```
+
+Production packaging requires a clean Git checkout and records the source
+commit plus a digest of the included application source. `--development`
+permits a work-in-progress build and marks its metadata accordingly; do not
+publish those test artifacts. The recipe is repeatable with pinned inputs,
+but compiler/archive timestamps mean byte-identical builds are not promised.
+
+`dist/` contains the setup executable, application ZIP, corresponding-sources
+ZIP and `SHA256SUMS.txt`. Publish all four together under the matching version
+tag on GitHub Releases. FFmpeg is built from the supplied FFmpeg/x264/zlib
+sources, including NASM optimization, rather than copied from another app.
+The source archive also supplies exact AutoHotkey, Qt and PySide/shiboken source
+versions and the build recipe. It is not an offline compiler/toolchain SDK.
+
+`THIRD_PARTY_NOTICES.txt` in the payload explains the distinct component licenses.
+Qt/PySide libraries stay as replaceable DLLs under `_internal`; source and rebuild
+instructions remain available. Do not omit the sources ZIP or relicense bundled
+components as MIT. No certificate purchase or paid service is part of this build.
+
+Run the normal test suite before building. Then set `SUPER_SNIPPER_PACKAGE` to
+`.build/payload/SuperSnipper` and run `tests/test_packaging.py` to check the real
+binary with system Python/FFmpeg absent from PATH and validate its file manifest.
+`python packaging/verify_release.py` runs the real silent installer, capture and
+recording paths, running-app refusal, same-version repair and uninstall in a new
+temporary directory. It refuses existing packaged-install registrations or
+shortcuts rather than overwriting them. It uses this Windows account's guarded,
+temporary application registration, not a separate Windows account. It preserves
+its evidence and captures. `--no-desktop` checks installation and diagnostics
+without opening capture windows. For a version transition, supply
+`--previous-setup C:\path\to\older-setup.exe --previous-version 0.9.9`; it checks
+the newer shortcut target, preserved data and removal of both versions on uninstall.
+Run this test on a disposable Windows user or VM for a genuine first-install
+witness; dependency-isolated runs on a developer host are a narrower check.
+
+The initial packaged release was exercised on the Windows 11 development host:
+real setup, screenshot, H.264/AAC recording, video storyboard, running-app refusal,
+same-version repair and uninstall. A synthetic earlier-version installer also
+verified the version-directory transition, shortcut update and two-version removal.
+Python and FFmpeg were absent from the test process's PATH. The packaged snip
+editor launched its selector child and recovered from cancellation; successful
+interactive selection, installed tray/hotkeys and sign-in startup still need
+separate witnesses. Source tests cover drawing and both storyboard workflows;
+they are not a clean Windows installation test.
+
+### Application archive contract for SC
+
+The versioned ZIP has one `SuperSnipper/` root containing `SuperSnipper.exe`
+(GUI, defaults to tray), `SuperSnipperCLI.exe` (console), `bin/ffmpeg.exe`,
+`bin/AutoHotkey64.exe`, the hotkey script, `_internal/`, notices and source.
+Both executables accept the existing capture/storyboard/panel arguments.
+`release-info.json` identifies version, source and payload schema (1);
+`file-manifest.json` records hashes for payload files other than itself.
+The manifest is an integration/build check, not a runtime restriction on
+replacing LGPL libraries. `--diagnostics FILE` writes runtime details to JSON.
+
+SC can unpack this archive without running the public installer. Its own update
+flow owns the chosen version, registration and startup. This repository does
+not modify SC's current source-archive pin; changing SC to consume this binary
+layout is a separate integration change. Source installs and their existing
+PowerShell setup remain available.
+
 ## License
 
 Super Snipper's source is released under the [MIT License](LICENSE).
-Copyright (c) 2026 Marc Stinebaugh. Separately installed dependencies retain
-their own licenses.
+Copyright (c) 2026 Marc Stinebaugh. Bundled and separately installed dependencies
+retain their own licenses; see the packaged third-party notices and source archive.
