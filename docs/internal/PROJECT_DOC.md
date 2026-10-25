@@ -52,7 +52,7 @@ Source: video storyboard claim 7de88a2839354fee98480c8ed116d074.
 <a id="project/capture-series-storyboards"></a>
 ### Snip storyboards
 
-**Root summary:** A separate window collects snips as ordered steps, marks each still, reuses an original without earlier marks, and stitches one PNG with the video storyboard layout rule.
+**Root summary:** Snip storyboards collect and annotate ordered pictures, reuse unmarked originals and stitch one PNG. Packaged selector launch and cancellation work; successful interactive selection remains unverified.
 
 `supersnipper/series.py` holds the step model (an untouched original path plus
 marks in image pixels) and Qt rendering; `supersnipper/series_ui.py` is the
@@ -70,8 +70,9 @@ missing or resized original fails the sheet with nothing written.
 `tests/test_super_snipper_series.py` drives the real window, real launcher
 capture via `--capture-box`, saved pixels, reuse isolation and unchanged
 originals; three mutations (marks copied on reuse, reversed order, marks not
-rendered) each turned it red. The interactive snip selector, native file picker
-and installed tray are untested.
+rendered) each turned it red. Packaged selector launch and cancellation recovery
+were witnessed; successful interactive selection, native file picker and installed
+tray remain unverified.
 Source: capture-series storyboard claim 52d9795543b34fda897e80bee1159227.
 
 <a id="project/packaging"></a>
@@ -116,7 +117,8 @@ FFmpeg's container duration can exceed the video stream in unusual files;
 an unavailable sample fails the export rather than shortening it silently.
 Clipboard and multi-sheet output were discussed but are not part of this implementation.
 Snip storyboards keep steps only while their window is open, stitch on the GUI
-thread, and have no witness yet for the interactive snip selector or native file picker.
+thread. Successful interactive snip selection and the native file picker still
+need witnesses; packaged selector launch and cancellation recovery were observed.
 The installer build host has no Windows Sandbox or WSL. A dependency-isolated
 host run cannot establish fresh-VM behavior. Paid signing is out of scope by
 Marc's direction; no claim is made that checksums bypass Windows trust controls.
