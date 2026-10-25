@@ -23,7 +23,16 @@
 <a id="manual/using-it"></a>
 ## Using it
 
-<!-- Not written yet. -->
+For video storyboards, click the panel's grid button, choose a local video,
+then set frames per second or minute and the maximum sheet edge in pixels.
+The preview reports frame count, order, tile size, blank cells and actual rate.
+Keep the requested rate or explicitly select a lower/higher full-grid option.
+Create saves one PNG beside the video, with a numbered suffix if needed.
+Cancel or close stops work; Open saved image opens the completed sheet.
+
+The complete usage, command-line examples, limits and failure behavior are in
+[Video storyboards](../../README.md#video-storyboards). FFmpeg must be installed
+separately; selecting a storyboard rate does not change video recording settings.
 
 <a id="manual/reference"></a>
 ## Reference

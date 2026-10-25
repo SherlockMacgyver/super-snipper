@@ -146,6 +146,62 @@ Drag to draw. The menu also provides Color, Width, Eraser and Clear all.
 - Marks are temporary. They are baked into the captured image or video rather
   than saved as an editable annotation layer.
 
+<a id="video-storyboards"></a>
+## Video storyboards
+
+Click the panel's grid button (**Create storyboard from a video**) to turn a
+recording or another video file into one ordered PNG collage. This opens a
+separate window; it does not change the recording rate or capture area.
+
+1. **Choose video** selects a local file that your installed FFmpeg can decode.
+2. Set the sample rate in **frames per minute** or **frames per second**.
+   For example, 6 frames per minute samples once every 10 seconds, starting
+   at 0 seconds. The count is video duration times rate, rounded up.
+3. Choose the **maximum sheet edge** (64-4096 pixels; default 2048). The sheet
+   fits within that square but uses the grid's own rectangular shape. The
+   numbered preview shows order, empty cells, sheet size and each tile's size.
+4. Keep **Requested rate**, or explicitly choose the nearest lower or higher
+   count whose best grid has no empty cells. The actual rate and interval are
+   shown before export. Fewer frames mean wider time gaps; more frames can
+   make individual images smaller. Your rate is never adjusted automatically.
+5. Click **Create storyboard**. Progress appears as frames decode; **Cancel**
+   stops the job. Closing the window cancels and waits for its worker to finish.
+   The saved path is selectable; **Open saved image** opens your image viewer.
+
+Frames read left to right, then down, with their display proportions preserved
+to pixel rounding. Layout maximizes tile area first and uses fewer empty cells
+as the tiebreaker. A prime count such as 13 can therefore leave blanks rather
+than force a thin strip. Empty cells are black. Timing is also recorded in the
+PNG's Description metadata. The sheet contains the frames, without captions.
+
+The PNG is saved beside the source as `<video name> storyboard.png`, adding a
+number if that name already exists. Nothing is copied to the clipboard, and
+this version does not split a video into several sheets. At most 1000 samples
+are allowed per sheet; lower the rate for longer videos. A smaller count often
+helps readability more than a higher resolution. AI services may resize uploads;
+the resolution field is a pixel size, not a guarantee about any model's limits.
+
+FFmpeg is the same external dependency used for recording, selected through
+`SUPER_SNIPPER_FFMPEG` or PATH. No additional binary is bundled. Files with no
+readable duration, missing video, undecodable requested frames, or unwritable
+output folders fail visibly instead of silently dropping frames. A seek that
+takes over 90 seconds for one frame stops the export. Duration comes from the
+container's FFmpeg header; unusual files with mismatched audio/video lengths
+can fail at a requested time beyond the video track. Samples select the first
+decodable frame at or after their time; high rates can repeat source frames.
+
+```powershell
+# Open the window without the tray.
+python super_snipper.py --storyboard
+# Export directly, with the exact requested sample rate.
+python super_snipper.py --storyboard "C:\Videos\demo.mp4" --sample-rate 6 --sample-unit minute --sheet-edge 2048
+```
+
+Storyboard tests exercise the real launcher, FFmpeg, saved pixels and Qt window.
+Run `python -m pytest tests/test_super_snipper_storyboard.py -q`; set
+`QT_QPA_PLATFORM=windows` to exercise an isolated native window instead of the
+default offscreen test surface. This does not install or replace a running tray.
+
 ## Saved files, logs and failed recordings
 
 Screenshots go to `Pictures\Screenshots`; videos go to `Videos\Captures` under
