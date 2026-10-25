@@ -44,6 +44,7 @@ clipboard copy, automatic recording hook, or multi-sheet output.
 collision protection, cancellation, rotated display dimensions, invalid inputs,
 Qt window lifecycle and HUD registration. Offscreen tests are integration
 evidence; native runs are isolated checkout evidence, never installed activation.
+Qt actions are simulated; the native operating-system file picker is unverified.
 Run the focused file with `QT_QPA_PLATFORM=windows` after changing this flow.
 Source: video storyboard claim 7de88a2839354fee98480c8ed116d074.
 

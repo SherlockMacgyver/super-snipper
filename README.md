@@ -201,6 +201,8 @@ Storyboard tests exercise the real launcher, FFmpeg, saved pixels and Qt window.
 Run `python -m pytest tests/test_super_snipper_storyboard.py -q`; set
 `QT_QPA_PLATFORM=windows` to exercise an isolated native window instead of the
 default offscreen test surface. This does not install or replace a running tray.
+Window tests use simulated Qt actions with real decoding; they do not exercise
+the native operating-system file picker or prove installed-tray activation.
 
 ## Saved files, logs and failed recordings
 

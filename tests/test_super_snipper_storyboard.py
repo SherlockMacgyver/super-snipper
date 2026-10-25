@@ -5,6 +5,8 @@ the default offscreen run is integration evidence, not installed acceptance.
 """
 
 import os
+import ctypes
+from ctypes import wintypes
 from pathlib import Path
 import subprocess
 import sys
@@ -224,3 +226,36 @@ def test_hud_storyboard_button_is_wired(monkeypatch, tmp_path):
         hud.hide()
         hud.deleteLater()
         app.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
+
+
+def test_real_launcher_window_startup_and_close(tmp_path):
+    env = dict(os.environ, QT_QPA_PLATFORM="windows", SUPER_SNIPPER_HOME=str(tmp_path / "home"))
+    process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "super_snipper.py"),
+                                "--storyboard"], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+    user32 = ctypes.windll.user32
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    found = []
+    @callback_type
+    def visit(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        title = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(hwnd, title, 256)
+        if owner.value == process.pid and title.value == "Super Snipper - Video storyboard":
+            found.append(hwnd)
+        return True
+    try:
+        deadline = time.monotonic() + 15
+        while not found and time.monotonic() < deadline and process.poll() is None:
+            user32.EnumWindows(visit, 0)
+            time.sleep(0.05)
+        assert found, "Real launcher did not create its storyboard window"
+        user32.PostMessageW(wintypes.HWND(found[0]), 0x0010, 0, 0)  # WM_CLOSE to our own child only.
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 0, (stdout, stderr)
+        assert b"Traceback" not in stderr
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
