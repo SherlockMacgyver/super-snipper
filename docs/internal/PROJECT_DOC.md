@@ -132,8 +132,7 @@ Source: A/V desync claim 3b61be05e11542989f2676cfb45cdbd3.
 
 Review then caught an intermittent drift: one one-minute armed recording went
 from +15 ms to -543 ms (sound early), while repeats and a continuous-tone run
-stayed within 35 ms. The WAV had lost samples; the cause (soundcard dropping
-short idle gaps, or a capture discontinuity) is not established. The audio
+stayed within 35 ms. The WAV had lost samples; the cause is not established. The audio
 loop now keeps the WAV on the wall clock (`_WallClockPacer`): after a read that
 had to wait for the device, lag beyond about two blocks on two consecutive
 waited reads is filled with silence, and each pad is logged as 'Loopback audio
@@ -143,8 +142,7 @@ pushed late. Fake-capture tests cover a real loss (padded) and a stall with
 queued audio (not padded); each guard's removal turned a test red. A live
 one-minute armed recording with 12 beeps stayed within -20..+25 ms with no pads;
 the intermittent loss did not recur there, so live padding is unwitnessed.
-Padding never trims, so a device clock faster than the wall clock could leave
-sound a few ms late over very long recordings.
+Padding never trims, so a fast device clock could leave sound slightly late.
 Source: drift claim 284a84fb9878436098c85959140f4bb9.
 
 <a id="project/gaps"></a>
