@@ -281,3 +281,28 @@ def test_held_back_silence_estimate_is_not_mistaken_for_a_loss(snipper, tmp_path
     recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
     assert recorder.padded_frames == 0
     assert abs(len(frames) / SR - elapsed) < 0.12
+
+
+def test_pause_after_empty_queue_answer_is_not_padded(snipper, tmp_path):
+    # Anvil's race: the thread reads "no packet waiting", then pauses 300 ms
+    # before the clock is read. Nothing is lost; the pause must not be charged
+    # as missing audio against the stale empty-queue answer.
+    class PauseAfterQueueRead(_FakeCapture):
+        paused = False
+
+        @property
+        def _pending_chunk(self):  # read just after _capture_available_frames
+            if not self.paused and self.start is not None and self.time.perf_counter() - self.start > 0.5:
+                self.paused = True
+                self.time.sleep(0.3)
+            return self.__dict__.get("_held", np.zeros(0, dtype=np.float32))
+
+        @_pending_chunk.setter
+        def _pending_chunk(self, value):
+            self.__dict__["_held"] = value
+
+    capture = PauseAfterQueueRead()
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    assert capture.paused
+    assert recorder.padded_frames == 0
+    assert int((frames[:, 0] == 0).sum()) == 0

@@ -295,8 +295,11 @@ class LoopbackAudioRecorder:
                             pcm = (pcm * 32767).astype("<i2", copy=False)
                             wav_file.writeframes(pcm.tobytes())
                             self.frames_written += int(pcm.shape[0])
-                        waiting, held = _capture_queue_state(recorder)
+                        # Clock first: a pause after this reading either leaves a packet
+                        # waiting (no decision) or only understates lag. Reading the clock
+                        # after the queue would charge a pause against a stale empty answer.
                         after = time.perf_counter()
+                        waiting, held = _capture_queue_state(recorder)
                         pad = pacer.after_read(waiting, after - origin, self.frames_written + held)
                         if pad:
                             # Captured audio fell behind the clock and nothing is queued:
