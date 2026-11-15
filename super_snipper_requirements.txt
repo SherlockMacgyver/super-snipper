@@ -4,4 +4,4 @@ PySide6-Essentials>=6.11
 Pillow>=12.1
 numpy>=2.4
 psutil>=7.2
-soundcard>=0.4.6
+soundcard>=0.4.6,<0.5

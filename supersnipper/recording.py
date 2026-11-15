@@ -189,39 +189,49 @@ def _send_ffmpeg_quit(process: subprocess.Popen[bytes]) -> None:
 class _WallClockPacer:
     """Decide how much silence to insert so the WAV keeps pace with elapsed time.
 
-    Lag is elapsed seconds x sample rate minus frames written. It is judged only
-    after a read that had to wait for the device: then nothing captured is still
-    queued, so remaining lag is lost audio. A read that returns at once may be
-    draining a backlog of valid samples, and padding there would push real sound
-    late. A single waited read can also be a stall inside the call, so lag must
-    exceed the allowance on two consecutive waited reads before any padding.
+    Lag is elapsed seconds x sample rate minus frames captured (written plus
+    the partial packet soundcard holds back for the next block). It is judged
+    only when WASAPI reports no packet waiting: then nothing captured is still
+    queued, and remaining lag is audio that was lost. While a packet waits, the
+    backlog holds valid earlier samples and padding would push real sound
+    late, so no decision is made. The allowance covers capture latency and
+    soundcard's own silence estimate, which it emits only after four idle
+    device periods (about 40 ms).
     """
 
     def __init__(self, samplerate: int, block_frames: int) -> None:
         self.block_frames = block_frames
-        self.block_seconds = block_frames / samplerate
         self.samplerate = samplerate
-        # Normal capture latency is a device period plus one pending packet.
-        self.allowance = max(2 * block_frames, int(0.05 * samplerate))
-        self.suspect = False
+        self.allowance = max(4 * block_frames, int(0.1 * samplerate))
         self.padded_frames = 0
         self.pad_events = 0
 
-    def after_read(self, read_seconds: float, elapsed: float, frames_written: int) -> int:
-        if read_seconds < 0.5 * self.block_seconds:
-            return 0  # returned from a backlog; samples may still be queued
-        lag = int(elapsed * self.samplerate) - frames_written
+    def after_read(self, packet_waiting: bool, elapsed: float, frames_captured: int) -> int:
+        if packet_waiting:
+            return 0  # captured samples are still queued; this is a backlog, not a loss
+        lag = int(elapsed * self.samplerate) - frames_captured
         if lag <= self.allowance:
-            self.suspect = False
             return 0
-        if not self.suspect:
-            self.suspect = True  # confirm on the next waited read
-            return 0
-        self.suspect = False
         pad = lag - self.block_frames
         self.padded_frames += pad
         self.pad_events += 1
         return pad
+
+
+def _capture_queue_state(recorder) -> tuple[bool, int]:
+    """(packet waiting in WASAPI, frames soundcard holds back for its next block).
+
+    soundcard (0.4.x) exposes no public queue query, so this reads its recorder
+    internals and fails loudly if a soundcard upgrade removed them.
+    """
+    try:
+        waiting = int(recorder._capture_available_frames()) > 0
+        held = len(recorder._pending_chunk) // len(set(recorder.channelmap))
+    except AttributeError as exc:
+        raise RuntimeError(
+            "This soundcard version does not expose its capture queue; "
+            "Super Snipper needs soundcard 0.4.x to keep audio in sync") from exc
+    return waiting, held
 
 
 class LoopbackAudioRecorder:
@@ -279,15 +289,15 @@ class LoopbackAudioRecorder:
                     origin = time.perf_counter()
                     pacer = _WallClockPacer(self.samplerate, self.block_frames)
                     while not self.stop_event.is_set():
-                        before = time.perf_counter()
                         data = recorder.record(numframes=self.block_frames)
-                        after = time.perf_counter()
                         if data is not None and data.size:
                             pcm = np.clip(data, -1.0, 1.0)
                             pcm = (pcm * 32767).astype("<i2", copy=False)
                             wav_file.writeframes(pcm.tobytes())
                             self.frames_written += int(pcm.shape[0])
-                        pad = pacer.after_read(after - before, after - origin, self.frames_written)
+                        waiting, held = _capture_queue_state(recorder)
+                        after = time.perf_counter()
+                        pad = pacer.after_read(waiting, after - origin, self.frames_written + held)
                         if pad:
                             # Captured audio fell behind the clock and nothing is queued:
                             # samples were lost. Silence keeps later sound on time.
