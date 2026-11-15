@@ -146,3 +146,138 @@ def test_record_video_passes_measured_start_offset_to_mux(snipper, tmp_path):
     audio_offset = mux.call_args.args[4]
     assert audio_offset == pytest.approx(-0.375)
     recorder.stop.assert_called_once()
+
+
+class _FakeCapture:
+    """Scripted WASAPI stand-in on the real clock, shaped like soundcard 0.4.x.
+
+    The device delivers 10 ms packets (480 frames); record(n) assembles n frames
+    from whole packets and holds the remainder back in _pending_chunk, exactly
+    as soundcard does, so a partial packet is nearly always held back.
+    lose_at/lose: that many seconds of packets vanish (a real loss).
+    stall_at/stall: one read blocks that long while packets keep queueing (no
+    loss); the next `slow_reads` reads are each delayed `slow` seconds.
+    fill_at/fill: the device goes silent for that long and, like soundcard's idle
+    estimate, one read then captures the whole span as zeros, held back in
+    _pending_chunk and handed out over the following blocks.
+    """
+
+    channelmap = [0, 1]
+    PACKET = 480
+
+    def __init__(self, lose_at=None, lose=0.0, stall_at=None, stall=0.0, slow_reads=0, slow=0.0,
+                 fill_at=None, fill=0.0):
+        import time as _time
+        self.time = _time
+        self.lose_at, self.lose, self.stall_at, self.stall = lose_at, lose, stall_at, stall
+        self.slow_reads, self.slow, self.pending_slow = slow_reads, slow, 0
+        self.fill_at, self.fill = fill_at, fill
+        self.start = None
+        self.consumed = 0   # frames taken from the device, in whole packets
+        self.delivered = 0  # frames returned to the caller
+        self.lost = 0
+        self._pending_chunk = np.zeros(0, dtype=np.float32)
+
+    def __enter__(self):
+        self.start = self.time.perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def _arrived(self):
+        packets = int((self.time.perf_counter() - self.start) * SR) // self.PACKET
+        return packets * self.PACKET
+
+    def _capture_available_frames(self):
+        return self.PACKET if self._arrived() > self.consumed else 0
+
+    def record(self, numframes):
+        now = self.time.perf_counter() - self.start
+        if self.stall_at is not None and now >= self.stall_at:
+            self.stall_at = None
+            self.time.sleep(self.stall)
+            self.pending_slow = self.slow_reads
+        elif self.pending_slow:
+            self.pending_slow -= 1
+            self.time.sleep(self.slow)
+        if self.fill_at is not None and now >= self.fill_at:
+            self.fill_at = None
+            self.time.sleep(self.fill)
+            self.consumed = self._arrived()  # the silent span, captured at once as zeros
+        if self.lose_at is not None and now >= self.lose_at:
+            self.lose_at = None
+            lost = self.lost = int(self.lose * SR) // self.PACKET * self.PACKET
+            self.consumed += lost
+            self.delivered += lost
+        while self.consumed - self.delivered < numframes:
+            while self._arrived() <= self.consumed:
+                self.time.sleep(0.001)
+            self.consumed += self.PACKET
+        self.delivered += numframes
+        self._pending_chunk = np.zeros(2 * (self.consumed - self.delivered), dtype=np.float32)
+        return np.full((numframes, 2), 0.5, dtype=np.float32)
+
+
+def _run_recorder(snipper, tmp_path, capture, seconds=1.4):
+    import sys
+    import time
+    import types
+    fake = types.ModuleType("soundcard")
+    speaker = types.SimpleNamespace(name="fake speaker")
+    fake.default_speaker = lambda: speaker
+    fake.get_microphone = lambda id, include_loopback: types.SimpleNamespace(recorder=lambda samplerate, channels: capture)
+    path = tmp_path / "audio.wav"
+    with patch.dict(sys.modules, {"soundcard": fake}):
+        recorder = snipper.LoopbackAudioRecorder(path)
+        recorder.start()
+        time.sleep(seconds)
+        recorder.stop()
+    elapsed = time.perf_counter() - capture.start
+    with wave.open(str(path), "rb") as wav:
+        frames = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").reshape(-1, 2)
+    return recorder, frames, elapsed
+
+
+def test_lost_capture_audio_is_padded_back_onto_the_clock(snipper, tmp_path):
+    capture = _FakeCapture(lose_at=0.5, lose=0.3)
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    silent = int((frames[:, 0] == 0).sum())
+    # Without padding the WAV would be 0.3 s short and later sound 0.3 s early.
+    assert abs(len(frames) / SR - elapsed) < 0.12, (len(frames) / SR, elapsed)
+    assert abs(silent / SR - 0.3) < 0.06
+    assert recorder.padded_frames == silent
+
+
+def test_buffered_audio_after_a_stall_is_not_padded(snipper, tmp_path):
+    # A read blocks 0.3 s but nothing is lost: the queued samples must follow
+    # unchanged. Padding here would push all later sound late.
+    capture = _FakeCapture(stall_at=0.5, stall=0.3)
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    assert recorder.padded_frames == 0
+    assert int((frames[:, 0] == 0).sum()) == 0
+    assert abs(len(frames) / SR - elapsed) < 0.12
+
+
+def test_slow_reads_while_draining_a_backlog_are_not_padded(snipper, tmp_path):
+    # Anvil's lossless case: a 300 ms stall, then two reads each delayed 15 ms
+    # while the backlog drains. Read duration says "waited"; the queue says no.
+    capture = _FakeCapture(stall_at=0.5, stall=0.3, slow_reads=2, slow=0.015)
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    assert recorder.padded_frames == 0
+    assert int((frames[:, 0] == 0).sum()) == 0
+    assert abs(len(frames) / SR - elapsed) < 0.12
+
+
+def test_recorder_fails_loudly_without_soundcard_queue_state(snipper):
+    with pytest.raises(RuntimeError, match="soundcard 0.4.x"):
+        snipper._capture_queue_state(object())
+
+
+def test_held_back_silence_estimate_is_not_mistaken_for_a_loss(snipper, tmp_path):
+    # soundcard's idle estimate arrives as one large chunk it hands out a block
+    # at a time; those held-back frames are captured, not missing.
+    capture = _FakeCapture(fill_at=0.5, fill=0.4)
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    assert recorder.padded_frames == 0
+    assert abs(len(frames) / SR - elapsed) < 0.12

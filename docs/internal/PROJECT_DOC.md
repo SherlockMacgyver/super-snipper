@@ -109,7 +109,7 @@ selection was not witnessed. Desktop interaction stopped at the owner's request.
 <a id="project/recording-sync"></a>
 ### Recording audio/video alignment
 
-**Root summary:** Recordings align computer audio to video using each track's measured start time; the old fixed offset (sound 0.27-0.38 s late) is gone.
+**Root summary:** Recordings align audio to video by measured start times and pad lost audio against the wall clock; fixed offset gone, one-minute recordings stay within 25 ms.
 
 Loopback audio starts before FFmpeg's first frame, and the raw WAV and MKV were
 joined from t=0, so sound played late by FFmpeg's start-up time. Measured on a
@@ -127,14 +127,30 @@ frame (~55 ms at the ~18 fps a 4K gdigrab capture reached). Display and audio
 output latency are inside that figure. `tests/test_super_snipper_av_sync.py`
 covers alignment with real FFmpeg in both directions, the log parser and the
 recorder-to-mux wiring; each test went red on the previous code or a planted
-regression. Not measured: drift over recordings much longer than 12 s, or
-long silent stretches (soundcard pads silence from wall time).
+regression.
 Source: A/V desync claim 3b61be05e11542989f2676cfb45cdbd3.
+
+Review then caught an intermittent drift: one one-minute armed recording went
+from +15 ms to -543 ms (sound early), while repeats and a continuous-tone run
+stayed within 35 ms. The WAV had lost samples; the cause is not established. The audio
+loop now keeps the WAV on the wall clock (`_WallClockPacer`): when WASAPI
+reports no packet waiting, lag beyond 100 ms (counting the partial packet
+soundcard holds back as captured) is filled with silence and logged as
+'Loopback audio lost ... padded with silence'. While a packet waits, queued
+samples are valid and nothing is padded. The queue is read from soundcard
+0.4.x internals (requirements pin <0.5); if they vanish, recording fails
+loudly. Packet-shaped
+fake-device tests cover a loss (padded), a stall and slow reads with queued
+audio, and soundcard's held-back silence estimate (none padded); removing
+each guard turned a test red. Live armed recordings (62 s and 31 s) stayed
+within -46..+25 ms with no pads; the intermittent loss did not recur, so
+live padding is unwitnessed. Padding never trims.
+Source: drift claim 284a84fb9878436098c85959140f4bb9.
 
 <a id="project/gaps"></a>
 ## Open Gaps
 
-**Root summary:** Clean-OS installer acceptance, sign-in startup, codec and variable-rate coverage, long-recording A/V drift and multi-monitor behavior need witnesses. Builds are unsigned; Windows may warn or block.
+**Root summary:** Clean-OS installer acceptance, sign-in startup, codec and variable-rate coverage, a live caught audio loss and multi-monitor behavior need witnesses. Builds are unsigned; Windows may warn or block.
 
 This change does not switch the running tray to this repository. Broad codec,
 variable-frame-rate and physical multi-monitor behavior remain unverified.
@@ -147,8 +163,9 @@ need witnesses; packaged selector launch and cancellation recovery were observed
 The installer build host has no Windows Sandbox or WSL. A dependency-isolated
 host run cannot establish fresh-VM behavior. Paid signing is out of scope by
 Marc's direction; no claim is made that checksums bypass Windows trust controls.
-Recording A/V alignment was measured on 12 s recordings only; drift over long
-recordings or through long silent stretches has not been measured.
+Long-recording audio loss is repaired by wall-clock padding, but a real loss has
+not yet been caught live; the next occurrence's 'padded with silence' log line
+will show where it happened. Recordings over one minute are unmeasured.
 
 <a id="project/reference"></a>
 ## Reference
