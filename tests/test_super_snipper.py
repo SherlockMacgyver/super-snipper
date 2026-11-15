@@ -57,7 +57,7 @@ class SuperSnipperTests(unittest.TestCase):
                 self.snipper.subprocess, "run", side_effect=fail_mux
             ) as run:
                 with self.assertRaisesRegex(RuntimeError, "recoverable source media preserved"):
-                    self.snipper._mux_recording(Path("ffmpeg.exe"), video, audio, output)
+                    self.snipper._mux_recording(Path("ffmpeg.exe"), video, audio, output, 0.0)
 
             hidden.assert_called_once_with(new_process_group=False)
             self.assertEqual(run.call_args.kwargs["creationflags"], 12345)
@@ -140,7 +140,7 @@ class SuperSnipperTests(unittest.TestCase):
             self.assertIs(kwargs["stdin"], self.snipper.subprocess.PIPE)
             self.assertIsNotNone(kwargs["stdout"])
             self.assertIs(kwargs["stderr"], kwargs["stdout"])
-            mux.assert_called_once_with(Path("ffmpeg.exe"), Path(popen.call_args.args[0][-1]), None, output)
+            mux.assert_called_once_with(Path("ffmpeg.exe"), Path(popen.call_args.args[0][-1]), None, output, None)
 
     def test_ffmpeg_video_command_hides_mouse_cursor(self):
         command = self.snipper._ffmpeg_video_command(

@@ -144,7 +144,10 @@ on when viewers need to see the pointer. **Audio is on by default** and records
 computer playback. If loopback capture cannot start, recording fails visibly;
 turn Audio off or use `--no-audio` to record without it. Check the output device,
 volume and a short sample before a demo; an empty or silent source does not
-guarantee an audible track. Panel recording settings reset when its process
+guarantee an audible track. Audio and video start a fraction of a second apart, so finalization lines
+the sound up with the picture using each track's recorded start time. If
+that start time cannot be read from FFmpeg's log, finalization stops with an
+error and keeps the raw media rather than saving a recording that is out of sync. Panel recording settings reset when its process
 restarts.
 
 The tray's **Hide panel** action hides the controls without stopping a recording.

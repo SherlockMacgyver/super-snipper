@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -199,6 +200,9 @@ class LoopbackAudioRecorder:
         self.thread: Optional[threading.Thread] = None
         self.error: Optional[BaseException] = None
         self.frames_written = 0
+        # Wall-clock time (time.time) at which WASAPI capture started: the
+        # moment the WAV's first sample describes. Used to align with video.
+        self.started_at: Optional[float] = None
 
     def start(self) -> None:
         self.thread = threading.Thread(target=self._record, name="SuperSnipperAudio", daemon=True)
@@ -231,6 +235,8 @@ class LoopbackAudioRecorder:
                 wav_file.setframerate(self.samplerate)
 
                 with microphone.recorder(samplerate=self.samplerate, channels=2) as recorder:
+                    # recorder.__enter__ has just called IAudioClient::Start.
+                    self.started_at = time.time()
                     while not self.stop_event.is_set():
                         data = recorder.record(numframes=self.block_frames)
                         if data is None or data.size == 0:
@@ -355,7 +361,41 @@ def _validate_recording_output(ffmpeg: Path, output_path: Path) -> None:
         raise RuntimeError(f"Recording output is not a valid MP4: {output_path}\n{result.stdout}")
 
 
-def _mux_recording(ffmpeg: Path, video_path: Path, audio_path: Optional[Path], output_path: Path) -> None:
+# FFmpeg's gdigrab stamps each frame with the wall clock (av_gettime), and the
+# input dump reports the first frame's stamp as "start:". This is the moment
+# the video's first frame describes, on the same clock as time.time().
+_GDIGRAB_START = re.compile(r"Input #0, gdigrab, from [^\r\n]*\r?\n\s*Duration: [^,]*, start: (-?\d+(?:\.\d+)?)")
+MAX_AV_START_OFFSET = 10.0
+
+
+def _gdigrab_start_time(log_text: str) -> float:
+    """Wall-clock start of the captured video, read from this recording's FFmpeg log."""
+    matches = _GDIGRAB_START.findall(log_text)
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"Could not read the video start time from the FFmpeg log ({len(matches)} matches); "
+            "audio cannot be aligned. Recoverable source media preserved")
+    return float(matches[0])
+
+
+def _audio_alignment_args(audio_offset: float) -> list[str]:
+    """Filter that places audio on the video's timeline.
+
+    audio_offset is audio start minus video start, in seconds: positive means
+    the first audio sample came after the first frame, so silence is added;
+    negative means audio started first, so its head is trimmed.
+    """
+    if abs(audio_offset) > MAX_AV_START_OFFSET:
+        raise RuntimeError(
+            f"Audio and video started {audio_offset:+.3f} s apart, beyond the "
+            f"{MAX_AV_START_OFFSET:.0f} s limit; recoverable source media preserved")
+    if audio_offset >= 0:
+        return ["-af", f"adelay={audio_offset * 1000:.3f}:all=1"]
+    return ["-af", f"atrim=start={-audio_offset:.6f},asetpts=PTS-STARTPTS"]
+
+
+def _mux_recording(ffmpeg: Path, video_path: Path, audio_path: Optional[Path], output_path: Path,
+                   audio_offset: Optional[float] = None) -> None:
     if output_path.exists():
         raise RuntimeError(f"Refusing to replace existing output {output_path}; recoverable source media preserved")
     # FFmpeg writes only into an exclusively created, attempt-owned staging
@@ -363,7 +403,10 @@ def _mux_recording(ffmpeg: Path, video_path: Path, audio_path: Optional[Path], o
     temporary = output_path.with_name("." + output_path.stem + "." + uuid.uuid4().hex + ".mp4")
     command = [str(ffmpeg), "-y", "-hide_banner", "-i", str(video_path)]
     if audio_path and audio_path.exists() and audio_path.stat().st_size > 44:
-        command.extend(["-i", str(audio_path), "-c:v", "copy", "-c:a", "aac", "-shortest"])
+        if audio_offset is None:
+            raise RuntimeError("Audio start offset is unknown; recoverable source media preserved")
+        command.extend(["-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                        *_audio_alignment_args(audio_offset), "-c:a", "aac", "-shortest"])
     else:
         command.extend(["-c:v", "copy"])
     command.append(str(temporary))
@@ -482,6 +525,10 @@ def record_video(
             config.FFMPEG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
             # Keep the log open until the child is reaped, including exceptions.
             with config.FFMPEG_LOG_FILE.open("ab") as ffmpeg_log:
+                # The recording lock serializes recorders, so everything after
+                # this offset belongs to this recording's FFmpeg.
+                ffmpeg_log.seek(0, os.SEEK_END)
+                log_start = ffmpeg_log.tell()
                 try:
                     process = subprocess.Popen(
                         command, cwd=str(config.APP_DIR), stdin=subprocess.PIPE,
@@ -500,12 +547,20 @@ def record_video(
                         _finish_recording_process(process)
             if process.returncode != 0:
                 raise RuntimeError(f"FFmpeg recording failed with exit code {process.returncode}")
+            audio_offset = None
             if audio_recorder:
                 audio_recorder.stop()
                 audio_stopped = True
+                if audio_recorder.started_at is None:
+                    raise RuntimeError("Loopback audio never started; recoverable source media preserved")
+                with config.FFMPEG_LOG_FILE.open("rb") as log:
+                    log.seek(log_start)
+                    video_started_at = _gdigrab_start_time(log.read().decode("utf-8", "replace"))
+                audio_offset = audio_recorder.started_at - video_started_at
+                logging.info("Audio started %+.3f s relative to video; aligning", audio_offset)
             if not video_path.exists() or video_path.stat().st_size == 0:
                 raise RuntimeError("FFmpeg did not create a usable video file")
-            _mux_recording(ffmpeg, video_path, audio_path, output_path)
+            _mux_recording(ffmpeg, video_path, audio_path, output_path, audio_offset)
             published = True
             _cleanup_published_recording(work_dir, [video_path] + ([audio_path] if audio_path else []))
             logging.info("Saved video recording: %s", output_path)

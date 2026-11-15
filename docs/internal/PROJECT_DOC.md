@@ -106,6 +106,31 @@ versions while retaining captures/settings. The packaged series window launched
 its selector child and recovered from cancellation; successful interactive
 selection was not witnessed. Desktop interaction stopped at the owner's request.
 
+<a id="project/recording-sync"></a>
+### Recording audio/video alignment
+
+**Root summary:** Recordings align computer audio to video using each track's measured start time; the old fixed offset (sound 0.27-0.38 s late) is gone.
+
+Loopback audio starts before FFmpeg's first frame, and the raw WAV and MKV were
+joined from t=0, so sound played late by FFmpeg's start-up time. Measured on a
+4K desktop with an independent flash-and-tone witness: +381 ms (plain
+fullscreen) and +270 ms (armed click), constant through the recording, so a
+start offset rather than drift. `supersnipper/recording.py` now records the
+wall-clock moment WASAPI capture starts (`LoopbackAudioRecorder.started_at`)
+and reads the first frame's wall-clock stamp from this recording's own FFmpeg
+log (gdigrab's `start:`; both use the system clock). `_mux_recording` trims
+or delays the audio by the difference. A missing or ambiguous start time, or
+an offset beyond 10 s, fails finalization and preserves raw media.
+
+After the fix the same witness measured -23 to +27 ms, within one captured
+frame (~55 ms at the ~18 fps a 4K gdigrab capture reached). Display and audio
+output latency are inside that figure. `tests/test_super_snipper_av_sync.py`
+covers alignment with real FFmpeg in both directions, the log parser and the
+recorder-to-mux wiring; each test went red on the previous code or a planted
+regression. Not measured: drift over recordings much longer than 12 s, or
+long silent stretches (soundcard pads silence from wall time).
+Source: A/V desync claim 3b61be05e11542989f2676cfb45cdbd3.
+
 <a id="project/gaps"></a>
 ## Open Gaps
 
@@ -122,6 +147,8 @@ need witnesses; packaged selector launch and cancellation recovery were observed
 The installer build host has no Windows Sandbox or WSL. A dependency-isolated
 host run cannot establish fresh-VM behavior. Paid signing is out of scope by
 Marc's direction; no claim is made that checksums bypass Windows trust controls.
+Recording A/V alignment was measured on 12 s recordings only; drift over long
+recordings or through long silent stretches has not been measured.
 
 <a id="project/reference"></a>
 ## Reference
