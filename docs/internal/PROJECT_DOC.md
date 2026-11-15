@@ -139,8 +139,7 @@ soundcard holds back as captured) is filled with silence and logged as
 'Loopback audio lost ... padded with silence'. While a packet waits, queued
 samples are valid and nothing is padded. The queue is read from soundcard
 0.4.x internals (requirements pin <0.5); if they vanish, recording fails
-loudly. A first version judged read duration instead; Anvil's lossless
-fault test showed it padding 269 ms of queued audio. Packet-shaped
+loudly. Packet-shaped
 fake-device tests cover a loss (padded), a stall and slow reads with queued
 audio, and soundcard's held-back silence estimate (none padded); removing
 each guard turned a test red. Live armed recordings (62 s and 31 s) stayed
