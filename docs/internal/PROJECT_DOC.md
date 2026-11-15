@@ -134,7 +134,7 @@ Source: A/V desync claim 3b61be05e11542989f2676cfb45cdbd3.
 <a id="project/gaps"></a>
 ## Open Gaps
 
-**Root summary:** Clean-OS installer acceptance, sign-in startup, broad codec and variable-rate coverage, and physical multi-monitor behavior need separate witnesses. Builds are unsigned; Windows may warn or block.
+**Root summary:** Clean-OS installer acceptance, sign-in startup, codec and variable-rate coverage, long-recording A/V drift and multi-monitor behavior need witnesses. Builds are unsigned; Windows may warn or block.
 
 This change does not switch the running tray to this repository. Broad codec,
 variable-frame-rate and physical multi-monitor behavior remain unverified.
