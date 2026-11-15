@@ -186,6 +186,44 @@ def _send_ffmpeg_quit(process: subprocess.Popen[bytes]) -> None:
     process.terminate()
 
 
+class _WallClockPacer:
+    """Decide how much silence to insert so the WAV keeps pace with elapsed time.
+
+    Lag is elapsed seconds x sample rate minus frames written. It is judged only
+    after a read that had to wait for the device: then nothing captured is still
+    queued, so remaining lag is lost audio. A read that returns at once may be
+    draining a backlog of valid samples, and padding there would push real sound
+    late. A single waited read can also be a stall inside the call, so lag must
+    exceed the allowance on two consecutive waited reads before any padding.
+    """
+
+    def __init__(self, samplerate: int, block_frames: int) -> None:
+        self.block_frames = block_frames
+        self.block_seconds = block_frames / samplerate
+        self.samplerate = samplerate
+        # Normal capture latency is a device period plus one pending packet.
+        self.allowance = max(2 * block_frames, int(0.05 * samplerate))
+        self.suspect = False
+        self.padded_frames = 0
+        self.pad_events = 0
+
+    def after_read(self, read_seconds: float, elapsed: float, frames_written: int) -> int:
+        if read_seconds < 0.5 * self.block_seconds:
+            return 0  # returned from a backlog; samples may still be queued
+        lag = int(elapsed * self.samplerate) - frames_written
+        if lag <= self.allowance:
+            self.suspect = False
+            return 0
+        if not self.suspect:
+            self.suspect = True  # confirm on the next waited read
+            return 0
+        self.suspect = False
+        pad = lag - self.block_frames
+        self.padded_frames += pad
+        self.pad_events += 1
+        return pad
+
+
 class LoopbackAudioRecorder:
     def __init__(
         self,
@@ -203,6 +241,7 @@ class LoopbackAudioRecorder:
         # Wall-clock time (time.time) at which WASAPI capture started: the
         # moment the WAV's first sample describes. Used to align with video.
         self.started_at: Optional[float] = None
+        self.padded_frames = 0
 
     def start(self) -> None:
         self.thread = threading.Thread(target=self._record, name="SuperSnipperAudio", daemon=True)
@@ -237,14 +276,29 @@ class LoopbackAudioRecorder:
                 with microphone.recorder(samplerate=self.samplerate, channels=2) as recorder:
                     # recorder.__enter__ has just called IAudioClient::Start.
                     self.started_at = time.time()
+                    origin = time.perf_counter()
+                    pacer = _WallClockPacer(self.samplerate, self.block_frames)
                     while not self.stop_event.is_set():
+                        before = time.perf_counter()
                         data = recorder.record(numframes=self.block_frames)
-                        if data is None or data.size == 0:
-                            continue
-                        pcm = np.clip(data, -1.0, 1.0)
-                        pcm = (pcm * 32767).astype("<i2", copy=False)
-                        wav_file.writeframes(pcm.tobytes())
-                        self.frames_written += int(pcm.shape[0])
+                        after = time.perf_counter()
+                        if data is not None and data.size:
+                            pcm = np.clip(data, -1.0, 1.0)
+                            pcm = (pcm * 32767).astype("<i2", copy=False)
+                            wav_file.writeframes(pcm.tobytes())
+                            self.frames_written += int(pcm.shape[0])
+                        pad = pacer.after_read(after - before, after - origin, self.frames_written)
+                        if pad:
+                            # Captured audio fell behind the clock and nothing is queued:
+                            # samples were lost. Silence keeps later sound on time.
+                            wav_file.writeframes(bytes(4 * pad))
+                            self.frames_written += pad
+                            logging.warning("Loopback audio lost %.3f s at %.3f s; padded with silence",
+                                            pad / self.samplerate, after - origin)
+                    self.padded_frames = pacer.padded_frames
+                    if pacer.pad_events:
+                        logging.warning("Loopback audio padded %.3f s in %d gap(s) to stay in sync",
+                                        pacer.padded_frames / self.samplerate, pacer.pad_events)
         except BaseException as exc:
             self.error = exc
             logging.exception("Loopback audio recorder failed")

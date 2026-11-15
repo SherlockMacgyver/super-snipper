@@ -146,3 +146,83 @@ def test_record_video_passes_measured_start_offset_to_mux(snipper, tmp_path):
     audio_offset = mux.call_args.args[4]
     assert audio_offset == pytest.approx(-0.375)
     recorder.stop.assert_called_once()
+
+
+class _FakeCapture:
+    """Scripted WASAPI stand-in on the real clock: audio 'arrives' at SR frames per second.
+
+    lose_at/lose: that many seconds of captured audio vanish (a real loss).
+    stall_at/stall: one read blocks that long while audio keeps queueing (no loss).
+    """
+
+    def __init__(self, lose_at=None, lose=0.0, stall_at=None, stall=0.0):
+        import time as _time
+        self.time = _time
+        self.lose_at, self.lose, self.stall_at, self.stall = lose_at, lose, stall_at, stall
+        self.start = None
+        self.delivered = 0
+        self.lost = 0
+
+    def __enter__(self):
+        self.start = self.time.perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def _arrived(self):
+        return int((self.time.perf_counter() - self.start) * SR)
+
+    def record(self, numframes):
+        now = self.time.perf_counter() - self.start
+        if self.stall_at is not None and now >= self.stall_at:
+            self.stall_at = None
+            self.time.sleep(self.stall)
+        if self.lose_at is not None and now >= self.lose_at:
+            self.lose_at = None
+            self.lost = int(self.lose * SR)
+            self.delivered += self.lost
+        while self._arrived() - self.delivered < numframes:
+            self.time.sleep(0.002)
+        self.delivered += numframes
+        return np.full((numframes, 2), 0.5, dtype=np.float32)
+
+
+def _run_recorder(snipper, tmp_path, capture, seconds=1.4):
+    import sys
+    import time
+    import types
+    fake = types.ModuleType("soundcard")
+    speaker = types.SimpleNamespace(name="fake speaker")
+    fake.default_speaker = lambda: speaker
+    fake.get_microphone = lambda id, include_loopback: types.SimpleNamespace(recorder=lambda samplerate, channels: capture)
+    path = tmp_path / "audio.wav"
+    with patch.dict(sys.modules, {"soundcard": fake}):
+        recorder = snipper.LoopbackAudioRecorder(path)
+        recorder.start()
+        time.sleep(seconds)
+        recorder.stop()
+    elapsed = time.perf_counter() - capture.start
+    with wave.open(str(path), "rb") as wav:
+        frames = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").reshape(-1, 2)
+    return recorder, frames, elapsed
+
+
+def test_lost_capture_audio_is_padded_back_onto_the_clock(snipper, tmp_path):
+    capture = _FakeCapture(lose_at=0.5, lose=0.3)
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    silent = int((frames[:, 0] == 0).sum())
+    # Without padding the WAV would be 0.3 s short and later sound 0.3 s early.
+    assert abs(len(frames) / SR - elapsed) < 0.08, (len(frames) / SR, elapsed)
+    assert abs(silent / SR - 0.3) < 0.06
+    assert recorder.padded_frames == silent
+
+
+def test_buffered_audio_after_a_stall_is_not_padded(snipper, tmp_path):
+    # A read blocks 0.3 s but nothing is lost: the queued samples must follow
+    # unchanged. Padding here would push all later sound late.
+    capture = _FakeCapture(stall_at=0.5, stall=0.3)
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    assert recorder.padded_frames == 0
+    assert int((frames[:, 0] == 0).sum()) == 0
+    assert abs(len(frames) / SR - elapsed) < 0.08
