@@ -164,6 +164,8 @@ class _FakeCapture:
 
     channelmap = [0, 1]
     PACKET = 480
+    samplerate = SR
+    _idle_start_time = None  # soundcard's silence timer (perf_counter_ns)
 
     def __init__(self, lose_at=None, lose=0.0, stall_at=None, stall=0.0, slow_reads=0, slow=0.0,
                  fill_at=None, fill=0.0):
@@ -271,7 +273,7 @@ def test_slow_reads_while_draining_a_backlog_are_not_padded(snipper, tmp_path):
 
 def test_recorder_fails_loudly_without_soundcard_queue_state(snipper):
     with pytest.raises(RuntimeError, match="soundcard 0.4.x"):
-        snipper._capture_queue_state(object())
+        snipper._capture_queue_state(object(), 0.0)
 
 
 def test_held_back_silence_estimate_is_not_mistaken_for_a_loss(snipper, tmp_path):
@@ -306,3 +308,52 @@ def test_pause_after_empty_queue_answer_is_not_padded(snipper, tmp_path):
     assert capture.paused
     assert recorder.padded_frames == 0
     assert int((frames[:, 0] == 0).sum()) == 0
+
+
+class _SilentDeviceCapture(_FakeCapture):
+    """A device that stops sending packets (silence), with soundcard's idle estimate.
+
+    Like soundcard 0.4.x: when no packet arrives, start _idle_start_time, wait
+    four device periods, then return zeros for the whole span since the timer
+    started and advance the timer. One read inside the silence is followed by a
+    300 ms pause while the timer is running (Anvil's real-device case).
+    """
+
+    def __init__(self, silent_from=0.3):
+        super().__init__()
+        self.silent_from = silent_from
+        self.paused = False
+
+    def record(self, numframes):
+        now = self.time.perf_counter() - self.start
+        if now < self.silent_from:
+            return super().record(numframes)
+        held = np.asarray(self._pending_chunk, dtype=np.float32).reshape(-1, 2)
+        while len(held) < numframes:
+            if self._idle_start_time is None:
+                self._idle_start_time = self.time.perf_counter_ns()
+            self.time.sleep(0.04)
+            gap = self.time.perf_counter_ns() - self._idle_start_time
+            self._idle_start_time += gap
+            held = np.concatenate([held, np.zeros((int(SR * gap / 1e9), 2), dtype=np.float32)])
+        out, rest = held[:numframes], held[numframes:]
+        self.consumed = self.delivered = 0
+        self._pending_chunk = rest.reshape(-1)
+        if not self.paused and now > 0.6:
+            self.paused = True
+            self.time.sleep(0.3)  # scheduling pause while soundcard's timer runs
+        return out
+
+    def _capture_available_frames(self):
+        if self.time.perf_counter() - self.start >= self.silent_from:
+            return 0
+        return super()._capture_available_frames()
+
+
+def test_silence_soundcard_will_fill_is_not_padded_again(snipper, tmp_path):
+    capture = _SilentDeviceCapture()
+    recorder, frames, elapsed = _run_recorder(snipper, tmp_path, capture)
+    assert capture.paused
+    assert recorder.padded_frames == 0
+    # soundcard's estimate alone covers the pause; a second fill would overrun the clock
+    assert len(frames) / SR <= elapsed + 0.12, (len(frames) / SR, elapsed)

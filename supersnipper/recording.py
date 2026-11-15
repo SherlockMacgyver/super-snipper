@@ -218,20 +218,30 @@ class _WallClockPacer:
         return pad
 
 
-def _capture_queue_state(recorder) -> tuple[bool, int]:
-    """(packet waiting in WASAPI, frames soundcard holds back for its next block).
+def _capture_queue_state(recorder, now: float) -> tuple[bool, int]:
+    """(packet waiting in WASAPI, frames already accounted for but not yet written).
 
+    Accounted frames are the partial packet soundcard holds back for its next
+    block plus any silence soundcard has started timing but not yet paid out:
+    on a silent device it records _idle_start_time (perf_counter_ns) and later
+    returns zeros for the whole span since then. Counting that span keeps one
+    ledger for silence, so the pacer never pads a gap soundcard will fill.
+    `now` is the caller's perf_counter() reading, the clock soundcard uses.
     soundcard (0.4.x) exposes no public queue query, so this reads its recorder
     internals and fails loudly if a soundcard upgrade removed them.
     """
     try:
         waiting = int(recorder._capture_available_frames()) > 0
         held = len(recorder._pending_chunk) // len(set(recorder.channelmap))
+        idle_start = recorder._idle_start_time
     except AttributeError as exc:
         raise RuntimeError(
             "This soundcard version does not expose its capture queue; "
             "Super Snipper needs soundcard 0.4.x to keep audio in sync") from exc
-    return waiting, held
+    idle = 0
+    if idle_start is not None:
+        idle = max(0, int((now * 1_000_000_000 - idle_start) * recorder.samplerate / 1_000_000_000))
+    return waiting, held + idle
 
 
 class LoopbackAudioRecorder:
@@ -299,7 +309,7 @@ class LoopbackAudioRecorder:
                         # waiting (no decision) or only understates lag. Reading the clock
                         # after the queue would charge a pause against a stale empty answer.
                         after = time.perf_counter()
-                        waiting, held = _capture_queue_state(recorder)
+                        waiting, held = _capture_queue_state(recorder, after)
                         pad = pacer.after_read(waiting, after - origin, self.frames_written + held)
                         if pad:
                             # Captured audio fell behind the clock and nothing is queued:
