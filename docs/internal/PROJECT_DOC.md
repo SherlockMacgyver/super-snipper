@@ -78,7 +78,7 @@ Source: capture-series storyboard claim 52d9795543b34fda897e80bee1159227.
 <a id="project/packaging"></a>
 ### Windows installer and application archive
 
-**Root summary:** Installer and archive bundle dependencies. Host installation, recording, export, repair and removal passed; clean-OS, tray/hotkeys and sign-in remain unverified. Windows may warn or block unsigned builds.
+**Root summary:** Version 1.0.1 packages the audio/video sync repairs with unchanged bundled dependencies. Release acceptance is pending; clean-OS, tray/hotkeys and sign-in remain unverified. Windows may warn or block unsigned builds.
 
 `packaging/version.json` owns the release version. `inputs.json` pins downloaded
 source/tool inputs; `requirements-build.txt` pins Python packages. PyInstaller
@@ -94,8 +94,8 @@ The public installer uses per-user versioned folders, optional sign-in/desktop
 shortcuts and refuses modification while its application is running. Uninstall
 keeps captures and application settings/logs.
 
-SC's current source-archive pin is untouched. The binary archive contract is in
-README, for the separate SC integration follow-up. Source: installer claim
+SC's chosen version pin is untouched. The binary archive contract is in
+README; SC adoption remains a separate integration change. Source: installer claim
 e36698eeac42420aa2f4de9fad353d59. Release verification is recorded in that checklist;
 source tests and developer-host isolation are not clean-OS acceptance.
 

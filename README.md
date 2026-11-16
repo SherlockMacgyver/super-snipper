@@ -397,6 +397,11 @@ display scaling, reproduction steps and relevant logs, removing private details.
 <a id="packaged-build"></a>
 ## Building and verifying the Windows release
 
+Version 1.0.1 packages the audio/video synchronization repairs: measured start-time
+alignment and audio pacing that accounts for queued samples and pending silence.
+The runtime components remain pinned to the same versions as 1.0.0. The public
+installer and application ZIP share the same rebuilt application payload.
+
 Build on Windows x64 with **CPython 3.14.3** and Inno Setup 6. The build uses an
 isolated virtual environment; it does not install tools into the system Python.
 The compiler, assembler, AutoHotkey and upstream source URLs/checksums are pinned
