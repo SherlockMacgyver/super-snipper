@@ -78,7 +78,7 @@ Source: capture-series storyboard claim 52d9795543b34fda897e80bee1159227.
 <a id="project/packaging"></a>
 ### Windows installer and application archive
 
-**Root summary:** Installer and archive bundle dependencies. Host installation, recording, export, repair and removal passed; clean-OS, tray/hotkeys and sign-in remain unverified. Windows may warn or block unsigned builds.
+**Root summary:** Version 1.0.1 bundles the A/V sync repairs. Host installation, audio recording, upgrade and uninstall passed; clean-OS, tray/hotkeys and sign-in remain unverified. Builds are unsigned.
 
 `packaging/version.json` owns the release version. `inputs.json` pins downloaded
 source/tool inputs; `requirements-build.txt` pins Python packages. PyInstaller
@@ -94,17 +94,19 @@ The public installer uses per-user versioned folders, optional sign-in/desktop
 shortcuts and refuses modification while its application is running. Uninstall
 keeps captures and application settings/logs.
 
-SC's current source-archive pin is untouched. The binary archive contract is in
-README, for the separate SC integration follow-up. Source: installer claim
-e36698eeac42420aa2f4de9fad353d59. Release verification is recorded in that checklist;
-source tests and developer-host isolation are not clean-OS acceptance.
+Version 1.0.1 uses the same pinned runtime components as 1.0.0 and packages the
+recorder start-time, buffered-audio and pending-silence repairs. Its source ZIP
+contains the matching dependency sources and notices. SC's selected version
+pin is unchanged; adopting this release remains separate work.
 
-Actual host setup, screenshot, H.264/AAC recording, video storyboard, running-app
-refusal, repair and uninstall passed with restricted PATH. A synthetic older
-version verified directory transition, shortcut target and removal of both
-versions while retaining captures/settings. The packaged series window launched
-its selector child and recovered from cancellation; successful interactive
-selection was not witnessed. Desktop interaction stopped at the owner's request.
+Host acceptance covered a real 1.0.0-to-1.0.1 upgrade, packaged diagnostics,
+screenshot, H.264/AAC recording, storyboard export, running-app refusal,
+same-version repair and removal of both versions. Captures/settings survived,
+and the source tray was untouched. Runtime checks excluded system Python and
+FFmpeg from PATH. These are developer-host results, not clean-OS, installed
+hotkey, sign-in or interactive-selector acceptance. The earlier packaging
+entry is frozen in [PROJECT_HISTORY.md](PROJECT_HISTORY.md#history/packaging-1-0-0).
+Release evidence: claim 78d9a47cc9a64e0ba329deda9184d23f.
 
 <a id="project/recording-sync"></a>
 ### Recording audio/video alignment

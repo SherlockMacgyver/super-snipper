@@ -397,6 +397,14 @@ display scaling, reproduction steps and relevant logs, removing private details.
 <a id="packaged-build"></a>
 ## Building and verifying the Windows release
 
+Version 1.0.1 packages the audio/video synchronization repairs: measured start-time
+alignment and audio pacing that accounts for queued samples and pending silence.
+The runtime components remain pinned to the same versions as 1.0.0. The public
+installer and application ZIP share the same rebuilt application payload.
+On the Windows development host, 1.0.0-to-1.0.1 upgrade, packaged recording with
+audio, repair and uninstall preserved captures/settings. Clean-OS, installed
+tray/hotkeys and sign-in acceptance remain separate from these host checks.
+
 Build on Windows x64 with **CPython 3.14.3** and Inno Setup 6. The build uses an
 isolated virtual environment; it does not install tools into the system Python.
 The compiler, assembler, AutoHotkey and upstream source URLs/checksums are pinned
@@ -470,8 +478,8 @@ replacing LGPL libraries. `--diagnostics FILE` writes runtime details to JSON.
 
 SC can unpack this archive without running the public installer. Its own update
 flow owns the chosen version, registration and startup. This repository does
-not modify SC's current source-archive pin; changing SC to consume this binary
-layout is a separate integration change. Source installs and their existing
+not modify SC's selected release pin; moving that pin is a separate integration
+change. Source installs and their existing
 PowerShell setup remain available.
 
 ## License
